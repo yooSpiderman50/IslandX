@@ -40,6 +40,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -124,7 +126,9 @@ private val Chip = Color(0xFF2A2A2A)
 fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
     val ctx = LocalContext.current
     val view = LocalView.current
-    val screenW = LocalConfiguration.current.screenWidthDp
+    val configuration = LocalConfiguration.current
+    val screenW = configuration.screenWidthDp.coerceAtLeast(1)
+    val screenH = configuration.screenHeightDp.coerceAtLeast(1)
     var expanded by remember { mutableStateOf(false) }
     var index by remember { mutableIntStateOf(0) }
 
@@ -184,8 +188,8 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
     val minH = if (mode == Mode.COMPACT) maxOf(settings.heightDp, 36) else settings.heightDp
     val targetW = when (mode) {
         Mode.IDLE -> settings.widthDp
-        Mode.COMPACT -> minOf(settings.widthDp + 2 * COMPACT_SIDE, screenW - 16)
-        Mode.EXPANDED -> minOf(screenW - 24, 380)
+        Mode.COMPACT -> minOf(settings.widthDp + 2 * COMPACT_SIDE, (screenW - 16).coerceAtLeast(1))
+        Mode.EXPANDED -> minOf((screenW - 24).coerceAtLeast(1), 380)
     }
     val targetRadius = when (mode) {
         Mode.EXPANDED -> maxOf(settings.cornerDp, 28).toFloat()
@@ -206,7 +210,10 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
         modifier = Modifier
             .width(w)
             .animateContentSize(spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow))
-            .heightIn(min = h)
+            .heightIn(
+                min = h,
+                max = maxOf(minH, screenH - settings.offsetY - 8).dp
+            )
             .clip(shape)
             .background(Color.Black)
             .then(
@@ -393,6 +400,7 @@ private fun ExpandedContent(
     Column(
         Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(start = 18.dp, end = 18.dp, top = topPad, bottom = 16.dp)
     ) {
         when (event) {

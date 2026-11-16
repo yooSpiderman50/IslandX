@@ -13,10 +13,18 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.graphics.drawable.toBitmap
 import com.islandx.app.IslandXApp
+import com.islandx.app.data.IslandSettings
 import com.islandx.app.domain.EventAction
 import com.islandx.app.domain.IslandEvent
 import com.islandx.app.domain.MediaBridge
 import com.islandx.app.domain.PriorityEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * Needs "Notification access". It feeds the island with:
@@ -32,6 +40,9 @@ class IslandNotificationListener : NotificationListenerService() {
     private lateinit var component: ComponentName
     private var sessionListenerAdded = false
     private val iconCache = HashMap<String, Bitmap?>()
+    private val listenerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var settingsJob: Job? = null
+    private var lastSettings: IslandSettings? = null
 
     private val sessionsListener =
         MediaSessionManager.OnActiveSessionsChangedListener { attach(it) }
@@ -47,6 +58,10 @@ class IslandNotificationListener : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
+        settingsJob?.cancel()
+        settingsJob = listenerScope.launch {
+            (application as IslandXApp).settings.state.collect { onSettingsChanged(it) }
+        }
         msm = getSystemService(MediaSessionManager::class.java)
         component = ComponentName(this, IslandNotificationListener::class.java)
         try {
@@ -62,6 +77,8 @@ class IslandNotificationListener : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        settingsJob?.cancel()
+        settingsJob = null
         if (sessionListenerAdded) {
             try { msm.removeOnActiveSessionsChangedListener(sessionsListener) } catch (_: Exception) {}
             sessionListenerAdded = false
@@ -69,6 +86,50 @@ class IslandNotificationListener : NotificationListenerService() {
         controller?.unregisterCallback(mediaCallback)
         controller = null
         MediaBridge.controller = null
+        PriorityEngine.remove("media")
+    }
+
+    override fun onDestroy() {
+        settingsJob?.cancel()
+        listenerScope.cancel()
+        controller?.unregisterCallback(mediaCallback)
+        controller = null
+        MediaBridge.controller = null
+        super.onDestroy()
+    }
+
+    private fun onSettingsChanged(s: IslandSettings) {
+        val previous = lastSettings
+        lastSettings = s
+        if (!s.showMedia || controller?.packageName?.let { it in s.blockedApps } == true) {
+            PriorityEngine.remove("media")
+        } else {
+            publishMedia()
+        }
+        if (!s.showCalls) PriorityEngine.remove("call")
+        if (!s.showNotifications) {
+            PriorityEngine.events.value.filterIsInstance<IslandEvent.Notif>()
+                .forEach { PriorityEngine.remove(it.id) }
+        } else {
+            PriorityEngine.events.value.filterIsInstance<IslandEvent.Notif>()
+                .filter { it.key.substringBefore(':') in s.blockedApps }
+                .forEach { PriorityEngine.remove(it.id) }
+        }
+        if (!s.showCalls || s.blockedApps.isNotEmpty()) {
+            val call = PriorityEngine.events.value.filterIsInstance<IslandEvent.Call>()
+                .firstOrNull { !s.showCalls || it.packageName in s.blockedApps }
+            call?.let { PriorityEngine.remove(it.id) }
+        }
+
+        // When a feature is enabled again, repopulate from currently active notifications
+        // instead of waiting for the operating system to post a brand-new notification.
+        val reenabledNotifications = previous != null &&
+            ((!previous.showNotifications && s.showNotifications) ||
+                (!previous.showCalls && s.showCalls) ||
+                previous.blockedApps.any { it !in s.blockedApps })
+        if (reenabledNotifications) {
+            try { activeNotifications?.forEach { handle(it, initial = false) } } catch (_: Exception) {}
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -117,7 +178,8 @@ class IslandNotificationListener : NotificationListenerService() {
                     incoming = incoming,
                     actions = actions,
                     open = n.contentIntent,
-                    icon = iconFor(n, pkg)
+                    icon = iconFor(n, pkg),
+                    packageName = pkg
                 )
             )
             return

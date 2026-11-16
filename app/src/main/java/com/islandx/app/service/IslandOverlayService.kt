@@ -85,7 +85,8 @@ class IslandOverlayService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             if (!repo.state.value.showBattery) return
             val bm = this@IslandOverlayService.getSystemService(BatteryManager::class.java)
-            val pct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            val rawPct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            val pct = rawPct.coerceIn(0, 100)
             when (intent.action) {
                 Intent.ACTION_POWER_CONNECTED ->
                     PriorityEngine.post(IslandEvent.Battery(pct, true), 5000L)
@@ -155,8 +156,7 @@ class IslandOverlayService : Service() {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -190,8 +190,16 @@ class IslandOverlayService : Service() {
 
     private fun applyPosition(s: IslandSettings) {
         val d = resources.displayMetrics.density
-        params.x = (s.offsetX * d).toInt()
-        params.y = (s.offsetY * d).toInt()
+        // Keep the expanded island inside the visible display area. The expanded card can
+        // be wider than the compact pill, so clamp offsets using its maximum width.
+        val screenWidthDp = resources.configuration.screenWidthDp.coerceAtLeast(1)
+        val expandedWidthDp = minOf((screenWidthDp - 24).coerceAtLeast(1), 380)
+        val maxOffsetXDp = ((screenWidthDp - expandedWidthDp) / 2).coerceAtLeast(0)
+        val safeX = s.offsetX.coerceIn(-maxOffsetXDp, maxOffsetXDp)
+        val screenHeightDp = resources.configuration.screenHeightDp.coerceAtLeast(1)
+        val safeY = s.offsetY.coerceIn(0, (screenHeightDp - 80).coerceAtLeast(0))
+        params.x = (safeX * d).toInt()
+        params.y = (safeY * d).toInt()
     }
 
     private fun applySettings(s: IslandSettings) {
@@ -199,6 +207,7 @@ class IslandOverlayService : Service() {
             stopSelf()
             return
         }
+        if (!s.showBattery) PriorityEngine.remove("battery")
         applyPosition(s)
         val v = composeView ?: return
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE

@@ -36,3 +36,14 @@ APK: app/build/outputs/apk/debug/app-debug.apk
 - Fullscreen video/game auto-hide abhi nahi hai (sirf landscape hide hai).
 - Notification quick-reply, privacy dots (mic/camera) aur Maps-specific UI abhi nahi hain.
 - Call buttons tabhi aate hain jab dialer ki call notification me Answer/Decline buttons ho.
+
+
+## Version 1.1.0 update notes
+
+- Improved overlay bounds handling so the island window is less likely to extend beyond the visible screen.
+- Expanded content can scroll on shorter displays instead of being clipped by the overlay window height limit.
+- Settings changes now trigger media/call/notification event cleanup in the notification listener.
+- Foreground service and Android permission requirements remain in place; Android may still show its required running-service notification.
+- Version updated to `1.1.0` (`versionCode` 2).
+
+This source update should be built and tested with GitHub Actions and on a physical Android device. System pop-up placement is controlled partly by Android and the device manufacturer, so overlap behavior must be verified on the target phone.

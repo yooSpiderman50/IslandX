@@ -17,7 +17,8 @@ sealed class IslandEvent(val id: String, val priority: Int) {
         val incoming: Boolean,
         val actions: List<EventAction>,
         val open: PendingIntent?,
-        val icon: Bitmap?
+        val icon: Bitmap?,
+        val packageName: String = ""
     ) : IslandEvent("call", 100)
 
     data class Battery(val percent: Int, val charging: Boolean) : IslandEvent("battery", 80)
