@@ -271,8 +271,15 @@ class IslandNotificationListener : NotificationListenerService() {
     // ---------------------------------------------------------------- media
 
     private fun attach(list: List<MediaController>?) {
-        val pick = list?.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+        // Prefer a playing session, then a paused session. Some devices return an
+        // unrelated/stale controller first, so do not blindly select list[0].
+        val pick = list?.firstOrNull {
+            it.playbackState?.state == PlaybackState.STATE_PLAYING
+        } ?: list?.firstOrNull {
+            it.playbackState?.state == PlaybackState.STATE_PAUSED
+        } ?: list?.firstOrNull { it.playbackState != null }
             ?: list?.firstOrNull()
+
         if (pick?.sessionToken == controller?.sessionToken) {
             publishMedia()
             return
@@ -287,37 +294,46 @@ class IslandNotificationListener : NotificationListenerService() {
     private fun publishMedia() {
         val c = controller
         val st = c?.playbackState
+        // Not every audio app supplies metadata immediately (or at all). Playback
+        // state alone is enough to show the music icon and visualizer.
         val md = c?.metadata
-        if (c == null || st == null || md == null ||
+        if (c == null || st == null ||
             !settings.showMedia || c.packageName in settings.blockedApps
         ) {
             PriorityEngine.remove("media")
             return
         }
+
         val playing = st.state == PlaybackState.STATE_PLAYING
+        val active = playing ||
+            st.state == PlaybackState.STATE_BUFFERING ||
+            st.state == PlaybackState.STATE_CONNECTING ||
+            st.state == PlaybackState.STATE_FAST_FORWARDING ||
+            st.state == PlaybackState.STATE_REWINDING
         val paused = st.state == PlaybackState.STATE_PAUSED
-        if (!playing && !paused) {
+        if (!active && !paused) {
             PriorityEngine.remove("media")
             return
         }
-        val art = md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-            ?: md.getBitmap(MediaMetadata.METADATA_KEY_ART)
-            ?: md.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+
+        val art = md?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            ?: md?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
         PriorityEngine.post(
             IslandEvent.Media(
-                title = md.getString(MediaMetadata.METADATA_KEY_TITLE)
-                    ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE) ?: "Unknown",
-                artist = md.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                    ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE) ?: "",
+                title = md?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                    ?: md?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE) ?: "Music playing",
+                artist = md?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                    ?: md?.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE) ?: "",
                 art = art?.limit(256),
-                playing = playing,
+                playing = active,
                 positionMs = st.position,
                 updatedAt = if (st.lastPositionUpdateTime > 0) st.lastPositionUpdateTime
                 else SystemClock.elapsedRealtime(),
                 speed = st.playbackSpeed,
-                durationMs = md.getLong(MediaMetadata.METADATA_KEY_DURATION)
+                durationMs = md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
             ),
-            ttlMs = if (playing) 0L else 30_000L // paused media disappears after 30s
+            ttlMs = if (active) 0L else 30_000L // paused media disappears after 30s
         )
     }
 

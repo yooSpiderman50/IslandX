@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.3 (media visibility fix)
+
+- Keep the music event visible when an active media session does not publish metadata immediately.
+- Prefer a playing or paused media session over unrelated/stale sessions returned by Android.
+- Treat buffering/connecting/fast-forwarding/rewinding as active playback for capsule visibility.
+- Updated version metadata to `1.2.3` / `versionCode 5`.
+
+### Validation status
+
+- Source-level checks passed for the updated media-session selection and nullable metadata handling.
+- A full Android Gradle build and physical-device test have not been run in this environment. Run the GitHub Actions `Build APK` workflow before installing.
+
 ## 1.2.0 (development update)
 
 - Added expanded-card tabs for Home, Music, Notifications, Controls, Events, and Style.

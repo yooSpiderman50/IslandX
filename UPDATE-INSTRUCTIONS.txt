@@ -1,6 +1,18 @@
-IslandX v1.2.2 patch
+IslandX v1.2.3 media visibility fix
+
 Changed files:
 - app/build.gradle.kts
 - app/src/main/java/com/islandx/app/service/IslandNotificationListener.kt
+- CHANGELOG.md
+- UPDATE-INSTRUCTIONS.txt
 
-This patch refreshes Android active media sessions when notifications change. The capsule's music icon and animated bars appear when IslandX receives a valid media session. Android Notification Access must be enabled, and IslandX Settings > Music must be enabled. Some music apps do not expose all media controls.
+Fixes:
+- Music icon/visualizer can appear even when the media app has not provided metadata yet.
+- Session selection prefers a playing or paused session over an unrelated/stale session.
+- Buffering and connecting sessions are treated as active so the capsule can remain visible.
+
+Important:
+- Enable Android Settings > Apps > Special app access > Notification access > IslandX.
+- In IslandX settings, keep Music enabled.
+- Run GitHub Actions > Build APK and wait for it to succeed before installing the APK.
+- This patch has not been built or tested on a physical device in this environment.
