@@ -35,6 +35,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -289,7 +292,51 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
             }
 
             // ---- timer
+            var timerHours by remember { mutableStateOf("0") }
+            var timerMinutes by remember { mutableStateOf("5") }
+            var timerSeconds by remember { mutableStateOf("0") }
+            val customTimerSeconds = (timerHours.toLongOrNull() ?: 0L) * 3600L +
+                (timerMinutes.toLongOrNull() ?: 0L) * 60L +
+                (timerSeconds.toLongOrNull() ?: 0L)
+            val validCustomTimer = timerHours.toLongOrNull() != null &&
+                timerMinutes.toLongOrNull() != null && timerSeconds.toLongOrNull() != null &&
+                timerHours.toLongOrNull()!! >= 0 && timerMinutes.toLongOrNull()!! >= 0 &&
+                timerSeconds.toLongOrNull()!! >= 0 && customTimerSeconds > 0 &&
+                customTimerSeconds <= 7L * 24L * 3600L
             Block("Timer & stopwatch") {
+                Text("Set any duration", color = Color.White, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = timerHours,
+                        onValueChange = { if (it.length <= 5 && it.all(Char::isDigit)) timerHours = it },
+                        label = { Text("Hours") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = timerMinutes,
+                        onValueChange = { if (it.length <= 5 && it.all(Char::isDigit)) timerMinutes = it },
+                        label = { Text("Minutes") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = timerSeconds,
+                        onValueChange = { if (it.length <= 5 && it.all(Char::isDigit)) timerSeconds = it },
+                        label = { Text("Seconds") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Button(
+                    onClick = { TimerController.startCountdown(customTimerSeconds) },
+                    enabled = validCustomTimer,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Start custom timer") }
+                Text("You can set hours, minutes and seconds (up to 7 days).", color = Muted, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { TimerController.startCountdown(60) }) { Text("1 min") }
                     OutlinedButton(onClick = { TimerController.startCountdown(300) }) { Text("5 min") }

@@ -1,3 +1,8 @@
+# IslandX v1.2.5
+
+- Add a custom countdown timer with editable hours, minutes, and seconds (up to 7 days).
+- Keep quick 1, 5, and 10 minute timer shortcuts and stopwatch.
+
 # Changelog
 
 ## 1.2.4 (accessibility overlay experiment)

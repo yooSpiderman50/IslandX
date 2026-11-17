@@ -1,10 +1,10 @@
-IslandX v1.2.4 — Accessibility Overlay test patch
+IslandX v1.2.5 — Custom Timer + Accessibility Overlay
 
 Changed files:
 1. app/src/main/AndroidManifest.xml
-2. app/src/main/java/com/islandx/app/service/IslandAccessibilityService.kt (new)
-3. app/src/main/java/com/islandx/app/service/IslandOverlayService.kt
-4. app/src/main/java/com/islandx/app/ui/HomeScreen.kt
+2. app/src/main/java/com/islandx/app/ui/HomeScreen.kt (updated: custom timer hours/minutes/seconds)
+3. app/src/main/java/com/islandx/app/service/IslandAccessibilityService.kt (new)
+4. app/src/main/java/com/islandx/app/service/IslandOverlayService.kt
 5. app/src/main/res/xml/island_accessibility_service.xml (new)
 6. app/src/main/res/values/strings.xml
 7. app/build.gradle.kts
@@ -17,11 +17,12 @@ What changed:
 - Reuses the existing Compose IslandOverlay UI, so music, gestures, and cards are not replaced with a separate XML island.
 - Avoids intentionally showing both the regular and accessibility overlay at the same time.
 - The existing Display over other apps permission remains as a fallback.
-- Version updated to 1.2.4 / versionCode 6.
+- Version updated to 1.2.5 / versionCode 7.
+- Added a custom countdown timer where users can enter hours, minutes and seconds, up to 7 days. Existing 1/5/10-minute shortcuts and stopwatch remain.
 
 How to apply using GitHub:
 1. Back up your current project first.
-2. Copy each changed/new file listed above to the same path in your repository.
+2. Copy the files in this patch to the exact same paths in your repository, replacing the existing files.
 3. Commit/push the changes to GitHub.
 4. Open Actions > Build APK and wait for the workflow to finish.
 5. Download the IslandX-debug-apk artifact only if the workflow succeeds.
