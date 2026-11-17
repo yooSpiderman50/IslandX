@@ -265,7 +265,10 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
     val h by animateDpAsState(minH.dp, dimensionSpec, label = "h")
     val r by animateDpAsState(targetRadius.dp, dimensionSpec, label = "r")
     val shape = RoundedCornerShape(r)
-    val maxOverlayHeight = maxOf(minH, screenH - settings.offsetY - 8).dp
+    // Keep expanded UI as a compact floating card instead of allowing the ComposeView
+    // to grow to almost the full screen height. Long content remains scrollable.
+    val availableHeight = (screenH - settings.offsetY - 24).coerceAtLeast(180)
+    val maxOverlayHeight = minOf(480, availableHeight).dp
 
     val interactionModifier = Modifier
         .pointerInput(Unit) {
@@ -305,7 +308,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
         .then(if (!isExpanded) interactionModifier else Modifier)
 
     Box(modifier = baseModifier) {
-        if (!popupMode) IslandBackground(settings, Modifier.fillMaxSize(), shape)
+        if (!popupMode) IslandBackground(settings, Modifier.matchParentSize(), shape)
         if (popupMode) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 // The compact capsule remains around the cutout while the card opens below it.
@@ -324,7 +327,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                         .then(if (popupMode) interactionModifier else Modifier),
                     contentAlignment = Alignment.Center
                 ) {
-                    IslandBackground(settings, Modifier.fillMaxSize(), compactShape)
+                    IslandBackground(settings, Modifier.matchParentSize(), compactShape)
                     if (event != null) CompactContent(event, settings.widthDp, compactHeight.dp, accent, settings.privacyMode)
                 }
                 Spacer(Modifier.height(8.dp))
@@ -340,7 +343,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                             else Modifier
                         )
                 ) {
-                    IslandBackground(settings, Modifier.fillMaxSize(), popupShape)
+                    IslandBackground(settings, Modifier.matchParentSize(), popupShape)
                     ExpandedContent(
                         event = event,
                         allEvents = events,

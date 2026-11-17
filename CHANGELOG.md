@@ -1,3 +1,9 @@
+# IslandX v1.2.7
+
+- Fix expanded capsule/card height so it stays a compact floating card instead of covering most of the screen.
+- Make background layers match the measured capsule/card size without forcing the parent to expand.
+- Keep long expanded content scrollable and preserve existing themes, custom photo, music, notifications, timer, and gestures.
+
 # IslandX v1.2.5
 
 - Add a custom countdown timer with editable hours, minutes, and seconds (up to 7 days).
