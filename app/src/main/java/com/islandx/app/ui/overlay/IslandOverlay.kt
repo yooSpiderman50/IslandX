@@ -141,19 +141,28 @@ private fun IslandBackground(settings: IslandSettings, modifier: Modifier, shape
     }
     Box(modifier = modifier.clip(shape)) {
         when (settings.backgroundStyle) {
+            0 -> Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.14f)))
             1 -> Box(Modifier.fillMaxSize().background(Color.White))
-            2 -> Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF243B55), Color(0xFF10182D)))))
+            2 -> Box(Modifier.fillMaxSize().background(Color(0xFF050505)))
             3 -> if (bitmap != null) {
                 Image(bitmap!!.asImageBitmap(), contentDescription = "Capsule background photo", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
                 Box(Modifier.fillMaxSize().background(Color.Black))
             }
-            else -> Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.72f)))
         }
         when (settings.backgroundStyle) {
-            0 -> Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.035f), Color.Black.copy(alpha = 0.22f)))))
-            1 -> Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.12f)))
-            3 -> Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.24f)))
+            0 -> {
+                // Frosted-glass surface: the window blur is configured by the overlay service;
+                // these translucent layers add the characteristic glass tint and reflected edge.
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(
+                    Color.White.copy(alpha = 0.30f),
+                    Color.White.copy(alpha = 0.10f),
+                    Color(0xFFB7D5DC).copy(alpha = 0.13f),
+                    Color.White.copy(alpha = 0.20f)
+                ))))
+                Box(Modifier.fillMaxSize().border(1.dp, Color.White.copy(alpha = 0.48f), shape))
+            }
+            3 -> Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.18f)))
         }
     }
 }
@@ -297,7 +306,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
         .heightIn(min = h, max = maxOverlayHeight)
         .then(
             if (!popupMode) {
-                Modifier.clip(shape).background(if (settings.backgroundStyle == 1) Color.White else if (settings.backgroundStyle == 2) Color(0xFF10182D) else Color.Black.copy(alpha = if (settings.backgroundStyle == 0) 0.72f else 1f)).then(
+                Modifier.clip(shape).background(when (settings.backgroundStyle) { 1 -> Color.White; 2 -> Color(0xFF050505); 3 -> Color.Transparent; else -> Color.Transparent }).then(
                     if (settings.glow && event != null) Modifier.border(1.dp, accent.copy(alpha = 0.65f), shape)
                     else Modifier
                 )
@@ -318,7 +327,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                         .width(compactWidth.dp)
                         .height(compactHeight.dp)
                         .clip(compactShape)
-                        .background(if (settings.backgroundStyle == 1) Color.White else if (settings.backgroundStyle == 2) Color(0xFF10182D) else Color.Black.copy(alpha = if (settings.backgroundStyle == 0) 0.72f else 1f))
+                        .background(when (settings.backgroundStyle) { 1 -> Color.White; 2 -> Color(0xFF050505); 3 -> Color.Transparent; else -> Color.Transparent })
                         .then(
                             if (settings.glow && event != null)
                                 Modifier.border(1.dp, accent.copy(alpha = 0.65f), compactShape)
@@ -336,7 +345,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                     Modifier
                         .fillMaxWidth()
                         .clip(popupShape)
-                        .background(if (settings.backgroundStyle == 1) Color.White else if (settings.backgroundStyle == 2) Color(0xFF10182D) else Color.Black.copy(alpha = if (settings.backgroundStyle == 0) 0.72f else 1f))
+                        .background(when (settings.backgroundStyle) { 1 -> Color.White; 2 -> Color(0xFF050505); 3 -> Color.Transparent; else -> Color.Transparent })
                         .then(
                             if (settings.glow && event != null)
                                 Modifier.border(1.dp, accent.copy(alpha = 0.65f), popupShape)

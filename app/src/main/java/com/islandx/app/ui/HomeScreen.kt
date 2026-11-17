@@ -259,7 +259,7 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
                 Text("Capsule background", color = Color.White, fontWeight = FontWeight.SemiBold)
                 Text("Choose the background only; other IslandX features stay unchanged.", color = Muted, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("Glass", "White", "Midnight").forEachIndexed { index, label ->
+                    listOf("Glass", "White", "Black").forEachIndexed { index, label ->
                         OutlinedButton(
                             onClick = { save(K.BACKGROUND_STYLE, index) },
                             modifier = Modifier.weight(1f)
@@ -280,7 +280,7 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
                 Text(
                     when (s.backgroundStyle) {
                         1 -> "White background selected"
-                        2 -> "Midnight gradient selected"
+                        2 -> "Black background selected"
                         3 -> if (s.backgroundImageUri.isNotBlank()) "Your photo is selected" else "Choose a photo to use it as the background"
                         else -> "Glass background selected"
                     }, color = Muted, fontSize = 12.sp

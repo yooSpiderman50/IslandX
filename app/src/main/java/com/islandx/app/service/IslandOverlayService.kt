@@ -236,12 +236,26 @@ class IslandOverlayService : Service() {
         params.y = (safeY * d).toInt()
     }
 
+    private fun applyGlassBlur(style: Int) {
+        if (!::wm.isInitialized) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (style == 0) {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                params.blurBehindRadius = 32
+            } else {
+                params.blurBehindRadius = 0
+                params.flags = params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+            }
+        }
+    }
+
     private fun applySettings(s: IslandSettings) {
         if (!s.enabled) {
             removeOverlay()
             stopSelf()
             return
         }
+        applyGlassBlur(s.backgroundStyle)
         if (!s.showBattery) PriorityEngine.remove("battery")
         // Never show two copies of the island. The accessibility service owns the
         // window when the user has enabled it in Android Settings.

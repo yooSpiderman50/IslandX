@@ -83,12 +83,26 @@ class IslandAccessibilityService : AccessibilityService() {
         sendOverlayModeChanged()
     }
 
+    private fun applyGlassBlur(style: Int) {
+        val p = windowParams ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (style == 0) {
+                p.flags = p.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                p.blurBehindRadius = 32
+            } else {
+                p.blurBehindRadius = 0
+                p.flags = p.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+            }
+        }
+    }
+
     private fun updateIsland(settings: IslandSettings) {
         if (!settings.enabled) {
             removeIsland()
             return
         }
         if (islandView == null) addIsland()
+        applyGlassBlur(settings.backgroundStyle)
         val view = islandView ?: return
         updatePosition(settings)
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE

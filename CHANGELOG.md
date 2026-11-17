@@ -1,3 +1,10 @@
+# Changelog
+
+## 1.2.8
+- Add black, white, frosted glass and gallery photo background choices.
+- Enable Android blur-behind for the Glass style on Android 12+ when supported by the device.
+- Keep the overlay window compact and preserve existing controls.
+
 # IslandX v1.2.7
 
 - Fix expanded capsule/card height so it stays a compact floating card instead of covering most of the screen.

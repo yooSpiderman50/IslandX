@@ -1,15 +1,14 @@
-IslandX v1.2.7 — Compact expanded glass/background card fix
+IslandX v1.2.8 — Capsule Background Theme Update
 
-Changed files:
-1. app/src/main/java/com/islandx/app/ui/overlay/IslandOverlay.kt
-2. app/build.gradle.kts
-3. CHANGELOG.md
+Update these files in the existing GitHub repository, keeping the same paths:
+- app/build.gradle.kts
+- app/src/main/java/com/islandx/app/ui/HomeScreen.kt
+- app/src/main/java/com/islandx/app/ui/overlay/IslandOverlay.kt
+- app/src/main/java/com/islandx/app/service/IslandOverlayService.kt
+- app/src/main/java/com/islandx/app/service/IslandAccessibilityService.kt
+- CHANGELOG.md
 
-What changed:
-- Caps expanded-card height at 480dp (or the available screen height if smaller).
-- Background layers now match the measured capsule/card instead of forcing a full-height Compose window.
-- Expanded content remains vertically scrollable.
-- Existing background styles (Glass, White, Midnight, Photo), music, notifications, timer, and gestures are retained.
-- Version updated to 1.2.7 / versionCode 9.
+Features: Black, White, Glass (translucent frosted surface with Android blur-behind on Android 12+ where supported), and Choose Photo. Other IslandX features are intended to remain unchanged.
 
-Apply this patch to your existing IslandX repository by replacing the files at the same paths. Commit and push, then run Actions > Build APK. Install only if the workflow succeeds. The source patch has been edited, but this environment has not run a Gradle build or device test.
+Commit message: Add black white glass and gallery capsule themes (v1.2.8)
+Build and test with GitHub Actions before installing the APK.
