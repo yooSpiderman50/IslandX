@@ -134,6 +134,9 @@ class IslandNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
+        // Some Android/OEM builds don't reliably notify the active-session listener when
+        // a media app starts. Refresh sessions when its notification changes as a fallback.
+        refreshMediaSessions()
         handle(sbn, initial = false)
     }
 
@@ -141,6 +144,18 @@ class IslandNotificationListener : NotificationListenerService() {
         sbn ?: return
         PriorityEngine.remove(keyOf(sbn))
         if (sbn.notification.category == Notification.CATEGORY_CALL) PriorityEngine.remove("call")
+        // A media app may replace its notification/session while switching tracks.
+        refreshMediaSessions()
+    }
+
+    private fun refreshMediaSessions() {
+        if (!::msm.isInitialized || !::component.isInitialized) return
+        try {
+            attach(msm.getActiveSessions(component))
+        } catch (_: SecurityException) {
+            // Notification access is required for active media-session information.
+        } catch (_: Exception) {
+        }
     }
 
     private fun keyOf(sbn: StatusBarNotification) = "${sbn.packageName}:${sbn.id}:${sbn.tag}"
