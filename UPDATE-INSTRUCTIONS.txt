@@ -1,15 +1,16 @@
-IslandX v1.2.5 — Custom Timer + Accessibility Overlay
+IslandX v1.2.6 — Capsule Background Customization + existing features
 
 Changed files:
 1. app/src/main/AndroidManifest.xml
 2. app/src/main/java/com/islandx/app/ui/HomeScreen.kt (updated: custom timer hours/minutes/seconds)
 3. app/src/main/java/com/islandx/app/service/IslandAccessibilityService.kt (new)
-4. app/src/main/java/com/islandx/app/service/IslandOverlayService.kt
+4. app/src/main/java/com/islandx/app/ui/overlay/IslandOverlay.kt (updated: capsule background rendering)
+5. app/src/main/java/com/islandx/app/service/IslandOverlayService.kt
 5. app/src/main/res/xml/island_accessibility_service.xml (new)
 6. app/src/main/res/values/strings.xml
-7. app/build.gradle.kts
-8. CHANGELOG.md
-9. README.md
+8. app/build.gradle.kts
+9. CHANGELOG.md
+10. README.md
 
 What changed:
 - Added a real AccessibilityService using TYPE_ACCESSIBILITY_OVERLAY.
@@ -34,3 +35,5 @@ Important:
 - The accessibility permission is optional but powerful. The service declares canRetrieveWindowContent=false and does not read screen content.
 - Android/device software controls system-window layering. This patch is a test implementation and cannot guarantee that every status-bar icon or heads-up notification will be behind the island.
 - This environment did not have Gradle or a Gradle wrapper available, so a full Android build has NOT been run here. Do not assume the APK compiles until GitHub Actions succeeds.
+
+New in 1.2.6: Customize capsule background as Glass, White, Midnight gradient, or a photo selected from the phone gallery. Photo access is persisted so it remains selected after reopening the app.

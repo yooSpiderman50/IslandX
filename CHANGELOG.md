@@ -75,3 +75,7 @@ This patch improves vertical positioning only. A normal `TYPE_APPLICATION_OVERLA
 - GitHub Actions workflow YAML parsed successfully.
 - A full Gradle/Android build has not been run in this environment because a Gradle executable/wrapper is not present in the uploaded project and this environment cannot download dependencies. Run the repository's GitHub Actions workflow before installing this APK.
 - Physical-device tests are still required for overlay/system-popup interactions, media players, call notifications, and Android foreground-service behavior.
+
+## 1.2.6
+- Added capsule background choices: Glass, White, Midnight gradient, and user-selected photo.
+- Existing timer, music, notifications, gestures, and overlay options retained.

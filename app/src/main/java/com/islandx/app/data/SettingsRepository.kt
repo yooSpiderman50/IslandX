@@ -37,6 +37,8 @@ data class IslandSettings(
     val expansionMode: Int = 0, // 0 = expand in place, 1 = separate popup card
     val animationStyle: Int = 0, // 0 = smooth, 1 = snappy, 2 = reduced motion
     val privacyMode: Boolean = false,
+    val backgroundStyle: Int = 0, // 0 glass, 1 white, 2 midnight, 3 photo
+    val backgroundImageUri: String = "",
     val blockedApps: Set<String> = emptySet()
 )
 
@@ -58,6 +60,8 @@ object K {
     val EXPANSION_MODE = intPreferencesKey("expansion_mode")
     val ANIMATION_STYLE = intPreferencesKey("animation_style")
     val PRIVACY_MODE = booleanPreferencesKey("privacy_mode")
+    val BACKGROUND_STYLE = intPreferencesKey("background_style")
+    val BACKGROUND_IMAGE_URI = androidx.datastore.preferences.core.stringPreferencesKey("background_image_uri")
     val BLOCKED = stringSetPreferencesKey("blocked_apps")
 }
 
@@ -106,6 +110,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             expansionMode = (this[K.EXPANSION_MODE] ?: d.expansionMode).coerceIn(0, 1),
             animationStyle = (this[K.ANIMATION_STYLE] ?: d.animationStyle).coerceIn(0, 2),
             privacyMode = this[K.PRIVACY_MODE] ?: d.privacyMode,
+            backgroundStyle = (this[K.BACKGROUND_STYLE] ?: d.backgroundStyle).coerceIn(0, 3),
+            backgroundImageUri = this[K.BACKGROUND_IMAGE_URI] ?: d.backgroundImageUri,
             blockedApps = this[K.BLOCKED] ?: d.blockedApps
         )
     }

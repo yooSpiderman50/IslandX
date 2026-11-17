@@ -5,6 +5,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Build
@@ -24,6 +26,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -76,6 +80,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
@@ -107,6 +112,8 @@ import com.islandx.app.domain.TimerController
 import com.islandx.app.domain.openIntent
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -116,6 +123,40 @@ val AccentColors = listOf(
     Color(0xFF4DD0E1), Color(0xFF69F0AE), Color(0xFFFFB74D), Color(0xFFFF80AB), Color(0xFFFFFFFF)
 )
 val AccentNames = listOf("Cyan", "Green", "Orange", "Pink", "White")
+
+@Composable
+private fun IslandBackground(settings: IslandSettings, modifier: Modifier, shape: RoundedCornerShape) {
+    val context = LocalContext.current
+    val bitmap by produceState<Bitmap?>(initialValue = null, settings.backgroundImageUri, settings.backgroundStyle) {
+        value = null
+        if (settings.backgroundStyle == 3 && settings.backgroundImageUri.isNotBlank()) {
+            value = withContext(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(Uri.parse(settings.backgroundImageUri))?.use { input ->
+                        BitmapFactory.decodeStream(input)
+                    }
+                } catch (_: Exception) { null }
+            }
+        }
+    }
+    Box(modifier = modifier.clip(shape)) {
+        when (settings.backgroundStyle) {
+            1 -> Box(Modifier.fillMaxSize().background(Color.White))
+            2 -> Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF243B55), Color(0xFF10182D)))))
+            3 -> if (bitmap != null) {
+                Image(bitmap!!.asImageBitmap(), contentDescription = "Capsule background photo", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Box(Modifier.fillMaxSize().background(Color.Black))
+            }
+            else -> Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.72f)))
+        }
+        when (settings.backgroundStyle) {
+            0 -> Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.035f), Color.Black.copy(alpha = 0.22f)))))
+            1 -> Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.12f)))
+            3 -> Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.24f)))
+        }
+    }
+}
 
 private enum class Mode { IDLE, COMPACT, EXPANDED }
 private data class ContentKey(val mode: Mode, val id: String?)
@@ -253,7 +294,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
         .heightIn(min = h, max = maxOverlayHeight)
         .then(
             if (!popupMode) {
-                Modifier.clip(shape).background(Color.Black).then(
+                Modifier.clip(shape).background(if (settings.backgroundStyle == 1) Color.White else if (settings.backgroundStyle == 2) Color(0xFF10182D) else Color.Black.copy(alpha = if (settings.backgroundStyle == 0) 0.72f else 1f)).then(
                     if (settings.glow && event != null) Modifier.border(1.dp, accent.copy(alpha = 0.65f), shape)
                     else Modifier
                 )
@@ -264,6 +305,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
         .then(if (!isExpanded) interactionModifier else Modifier)
 
     Box(modifier = baseModifier) {
+        if (!popupMode) IslandBackground(settings, Modifier.fillMaxSize(), shape)
         if (popupMode) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 // The compact capsule remains around the cutout while the card opens below it.
@@ -273,7 +315,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                         .width(compactWidth.dp)
                         .height(compactHeight.dp)
                         .clip(compactShape)
-                        .background(Color.Black)
+                        .background(if (settings.backgroundStyle == 1) Color.White else if (settings.backgroundStyle == 2) Color(0xFF10182D) else Color.Black.copy(alpha = if (settings.backgroundStyle == 0) 0.72f else 1f))
                         .then(
                             if (settings.glow && event != null)
                                 Modifier.border(1.dp, accent.copy(alpha = 0.65f), compactShape)
@@ -282,6 +324,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                         .then(if (popupMode) interactionModifier else Modifier),
                     contentAlignment = Alignment.Center
                 ) {
+                    IslandBackground(settings, Modifier.fillMaxSize(), compactShape)
                     if (event != null) CompactContent(event, settings.widthDp, compactHeight.dp, accent, settings.privacyMode)
                 }
                 Spacer(Modifier.height(8.dp))
@@ -290,13 +333,14 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                     Modifier
                         .fillMaxWidth()
                         .clip(popupShape)
-                        .background(Color.Black)
+                        .background(if (settings.backgroundStyle == 1) Color.White else if (settings.backgroundStyle == 2) Color(0xFF10182D) else Color.Black.copy(alpha = if (settings.backgroundStyle == 0) 0.72f else 1f))
                         .then(
                             if (settings.glow && event != null)
                                 Modifier.border(1.dp, accent.copy(alpha = 0.65f), popupShape)
                             else Modifier
                         )
                 ) {
+                    IslandBackground(settings, Modifier.fillMaxSize(), popupShape)
                     ExpandedContent(
                         event = event,
                         allEvents = events,

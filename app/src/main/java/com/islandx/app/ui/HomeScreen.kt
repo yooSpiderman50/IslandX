@@ -93,6 +93,24 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
         ActivityResultContracts.RequestPermission()
     ) { localTick++ }
 
+    val backgroundImageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                activity.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) { }
+            scope.launch {
+                repo.update {
+                    it[K.BACKGROUND_IMAGE_URI] = uri.toString()
+                    it[K.BACKGROUND_STYLE] = 3
+                }
+            }
+        }
+    }
+
     val overlayOk = remember(tick, localTick) { Settings.canDrawOverlays(activity) }
     val accessibilityOk = remember(tick, localTick) {
         IslandAccessibilityService.isEnabled(activity)
@@ -237,6 +255,36 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
                 SwitchRow("Glow border on activity", s.glow) { save(K.GLOW, it) }
                 SwitchRow("Hide in landscape", s.hideInLandscape) { save(K.HIDE_LANDSCAPE, it) }
                 SwitchRow("Privacy mode (hide notification text)", s.privacyMode) { save(K.PRIVACY_MODE, it) }
+                Spacer(Modifier.height(8.dp))
+                Text("Capsule background", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Choose the background only; other IslandX features stay unchanged.", color = Muted, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("Glass", "White", "Midnight").forEachIndexed { index, label ->
+                        OutlinedButton(
+                            onClick = { save(K.BACKGROUND_STYLE, index) },
+                            modifier = Modifier.weight(1f)
+                        ) { Text(if (s.backgroundStyle == index) "✓ $label" else label, fontSize = 12.sp) }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { backgroundImageLauncher.launch(arrayOf("image/*")) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(if (s.backgroundStyle == 3 && s.backgroundImageUri.isNotBlank()) "Change photo" else "Choose photo") }
+                    if (s.backgroundImageUri.isNotBlank()) {
+                        OutlinedButton(onClick = { save(K.BACKGROUND_STYLE, 0); save(K.BACKGROUND_IMAGE_URI, "") }) {
+                            Text("Remove photo")
+                        }
+                    }
+                }
+                Text(
+                    when (s.backgroundStyle) {
+                        1 -> "White background selected"
+                        2 -> "Midnight gradient selected"
+                        3 -> if (s.backgroundImageUri.isNotBlank()) "Your photo is selected" else "Choose a photo to use it as the background"
+                        else -> "Glass background selected"
+                    }, color = Muted, fontSize = 12.sp
+                )
                 Spacer(Modifier.height(8.dp))
                 Text("Accent colour", color = Color.White)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
