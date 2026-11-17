@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.0 (development update)
+
+- Added expanded-card tabs for Home, Music, Notifications, Controls, Events, and Style.
+- Added two expansion layouts: expand in place or keep the compact capsule above a separate popup card.
+- Added Smooth, Snappy, and Reduced motion animation choices.
+- Added a privacy mode that hides notification title and message text in the island while retaining the app label.
+- Added quick accent-colour, glow-border, and haptic controls in the expanded Style tab.
+- Updated app version metadata to `1.2.0` / `versionCode 3`.
+
+### Validation status
+
+- Android manifest XML and GitHub Actions workflow YAML are checked for valid structure.
+- Source changes were reviewed for consistent settings keys and Compose call sites.
+- A full Gradle/Android build has **not** been run in this environment because the uploaded project has no Gradle wrapper and a Gradle executable/dependency download is unavailable here. Run the GitHub Actions workflow before installing this APK.
+- Physical-device testing is still required for popup placement, tab touch behavior, notification privacy, media controls, calls, and foreground-service behavior.
+
+---
+
+
 ## 1.1.0 (development update)
 
 - Clamped overlay X/Y offsets to safer display bounds and removed `FLAG_LAYOUT_NO_LIMITS` to reduce off-screen placement risk.

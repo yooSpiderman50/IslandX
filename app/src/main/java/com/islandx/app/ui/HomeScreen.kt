@@ -222,6 +222,7 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
                 SwitchRow("Haptic feedback", s.haptics) { save(K.HAPTICS, it) }
                 SwitchRow("Glow border on activity", s.glow) { save(K.GLOW, it) }
                 SwitchRow("Hide in landscape", s.hideInLandscape) { save(K.HIDE_LANDSCAPE, it) }
+                SwitchRow("Privacy mode (hide notification text)", s.privacyMode) { save(K.PRIVACY_MODE, it) }
                 Spacer(Modifier.height(8.dp))
                 Text("Accent colour", color = Color.White)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
@@ -243,6 +244,37 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
                 OutlinedButton(onClick = { showApps = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("Per-app rules (${s.blockedApps.size} blocked)")
                 }
+            }
+
+            // ---- expansion and animation
+            Block("Expansion & animation") {
+                Text("Expanded card style", color = Color.White, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { save(K.EXPANSION_MODE, 0) }) {
+                        Text(if (s.expansionMode == 0) "✓ In place" else "In place")
+                    }
+                    OutlinedButton(onClick = { save(K.EXPANSION_MODE, 1) }) {
+                        Text(if (s.expansionMode == 1) "✓ Popup card" else "Popup card")
+                    }
+                }
+                Text(
+                    if (s.expansionMode == 0) "The island grows into one card." else "The small island stays above a separate card.",
+                    color = Muted, fontSize = 12.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Animation style", color = Color.White, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(onClick = { save(K.ANIMATION_STYLE, 0) }) {
+                        Text(if (s.animationStyle == 0) "✓ Smooth" else "Smooth")
+                    }
+                    OutlinedButton(onClick = { save(K.ANIMATION_STYLE, 1) }) {
+                        Text(if (s.animationStyle == 1) "✓ Snappy" else "Snappy")
+                    }
+                    OutlinedButton(onClick = { save(K.ANIMATION_STYLE, 2) }) {
+                        Text(if (s.animationStyle == 2) "✓ Reduced" else "Reduced")
+                    }
+                }
+                Text("Reduced motion minimizes size and content transitions.", color = Muted, fontSize = 12.sp)
             }
 
             // ---- timer

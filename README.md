@@ -12,6 +12,9 @@ Camera cutout (punch-hole) ke upar iPhone jaisa Dynamic Island.
 - Quick toggles (torch, Wi-Fi, Bluetooth, sound, 5-min timer) + clock
 - Priority queue (call > battery > notification > timer > music), swipe se switch
 - Per-app allow/block, haptics, glow, accent colour, landscape hide, boot par auto-start
+- Expanded tabs: Home, Music, Notifications, Controls, Events, Style
+- Two expansion layouts: expand in place or separate popup card below the capsule
+- Smooth / Snappy / Reduced motion options and notification privacy mode
 
 ## Gestures
 Tap: open/expand | Long-press ya swipe down: expand | Swipe up: collapse
@@ -37,6 +40,13 @@ APK: app/build/outputs/apk/debug/app-debug.apk
 - Notification quick-reply, privacy dots (mic/camera) aur Maps-specific UI abhi nahi hain.
 - Call buttons tabhi aate hain jab dialer ki call notification me Answer/Decline buttons ho.
 
+
+## Version 1.2.0 update notes
+
+- Added top tabs to the expanded island and a separate popup-card layout option.
+- Added animation style selection and a privacy switch to hide notification title/message text.
+- Added accent colour, glow and haptic controls inside the expanded Style tab.
+- Updated version metadata to `1.2.0` (`versionCode` 3).
 
 ## Version 1.1.0 update notes
 

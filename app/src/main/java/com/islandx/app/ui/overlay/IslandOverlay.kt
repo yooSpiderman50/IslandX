@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -64,6 +65,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,6 +74,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,13 +93,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.islandx.app.IslandXApp
 import com.islandx.app.data.IslandSettings
+import com.islandx.app.data.K
 import com.islandx.app.domain.IslandEvent
 import com.islandx.app.domain.MediaBridge
 import com.islandx.app.domain.PriorityEngine
 import com.islandx.app.domain.TimerController
 import com.islandx.app.domain.openIntent
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -131,6 +137,7 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
     val screenH = configuration.screenHeightDp.coerceAtLeast(1)
     var expanded by remember { mutableStateOf(false) }
     var index by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableStateOf(IslandTab.HOME) }
 
     val safeIndex = if (events.isEmpty()) 0 else index.coerceIn(0, events.lastIndex)
     val event = events.getOrNull(safeIndex)
@@ -141,9 +148,10 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
         event != null -> Mode.COMPACT
         else -> Mode.IDLE
     }
+    val popupMode = isExpanded && settings.expansionMode == 1
     val accent = AccentColors.getOrElse(settings.accentIndex) { AccentColors[0] }
 
-    // A new top item always starts collapsed.
+    // A new top item always starts collapsed; incoming calls remain auto-expanded.
     LaunchedEffect(event?.id) { expanded = false }
 
     fun buzz() {
@@ -186,87 +194,151 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
     }
 
     val minH = if (mode == Mode.COMPACT) maxOf(settings.heightDp, 36) else settings.heightDp
+    val compactHeight = maxOf(settings.heightDp, 36)
+    val expandedWidth = minOf((screenW - 24).coerceAtLeast(1), 380)
+    val compactWidth = minOf(settings.widthDp + 2 * COMPACT_SIDE, expandedWidth)
     val targetW = when (mode) {
         Mode.IDLE -> settings.widthDp
-        Mode.COMPACT -> minOf(settings.widthDp + 2 * COMPACT_SIDE, (screenW - 16).coerceAtLeast(1))
-        Mode.EXPANDED -> minOf((screenW - 24).coerceAtLeast(1), 380)
+        Mode.COMPACT -> compactWidth
+        Mode.EXPANDED -> expandedWidth
     }
     val targetRadius = when (mode) {
         Mode.EXPANDED -> maxOf(settings.cornerDp, 28).toFloat()
         else -> minOf(settings.cornerDp.toFloat(), minH / 2f)
     }
-    val w by animateDpAsState(
-        targetW.dp, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow), label = "w"
-    )
-    val h by animateDpAsState(
-        minH.dp, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium), label = "h"
-    )
-    val r by animateDpAsState(
-        targetRadius.dp, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium), label = "r"
-    )
+    val animationDuration = when (settings.animationStyle) {
+        1 -> 150
+        2 -> 1
+        else -> 230
+    }
+    val dimensionSpec = when (settings.animationStyle) {
+        1 -> tween<Dp>(durationMillis = animationDuration)
+        2 -> tween<Dp>(durationMillis = 1)
+        else -> spring<Dp>(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
+    }
+    val w by animateDpAsState(targetW.dp, dimensionSpec, label = "w")
+    val h by animateDpAsState(minH.dp, dimensionSpec, label = "h")
+    val r by animateDpAsState(targetRadius.dp, dimensionSpec, label = "r")
     val shape = RoundedCornerShape(r)
+    val maxOverlayHeight = maxOf(minH, screenH - settings.offsetY - 8).dp
 
-    Box(
-        modifier = Modifier
-            .width(w)
-            .animateContentSize(spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow))
-            .heightIn(
-                min = h,
-                max = maxOf(minH, screenH - settings.offsetY - 8).dp
+    val interactionModifier = Modifier
+        .pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { onTap.value() },
+                onLongPress = { onLong.value() },
+                onDoubleTap = { onDouble.value() }
             )
-            .clip(shape)
-            .background(Color.Black)
-            .then(
-                if (settings.glow && event != null)
-                    Modifier.border(1.dp, accent.copy(alpha = 0.65f), shape)
-                else Modifier
-            )
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onTap.value() },
-                    onLongPress = { onLong.value() },
-                    onDoubleTap = { onDouble.value() }
-                )
-            }
-            .pointerInput(Unit) {
-                var total = Offset.Zero
-                detectDragGestures(
-                    onDragStart = { total = Offset.Zero },
-                    onDragEnd = { onSwipe.value(total, 48.dp.toPx()) },
-                    onDragCancel = { total = Offset.Zero },
-                    onDrag = { change, amount ->
-                        change.consume()
-                        total += amount
-                    }
-                )
-            }
-    ) {
-        Crossfade(
-            targetState = ContentKey(mode, event?.id),
-            animationSpec = tween(220),
-            label = "content"
-        ) { key ->
-            when (key.mode) {
-                Mode.IDLE -> Box(Modifier.fillMaxWidth())
-                Mode.COMPACT -> if (event != null) {
-                    CompactContent(event, settings.widthDp, h, accent)
+        }
+        .pointerInput(Unit) {
+            var total = Offset.Zero
+            detectDragGestures(
+                onDragStart = { total = Offset.Zero },
+                onDragEnd = { onSwipe.value(total, 48.dp.toPx()) },
+                onDragCancel = { total = Offset.Zero },
+                onDrag = { change, amount ->
+                    change.consume()
+                    total += amount
                 }
-                Mode.EXPANDED -> ExpandedContent(
-                    event = event,
-                    count = events.size,
-                    selected = safeIndex,
-                    topPad = settings.heightDp.dp + 2.dp,
-                    accent = accent
+            )
+        }
+
+    val baseModifier = Modifier
+        .width(w)
+        .animateContentSize(tween(durationMillis = animationDuration))
+        .heightIn(min = h, max = maxOverlayHeight)
+        .then(
+            if (!popupMode) {
+                Modifier.clip(shape).background(Color.Black).then(
+                    if (settings.glow && event != null) Modifier.border(1.dp, accent.copy(alpha = 0.65f), shape)
+                    else Modifier
                 )
+            } else Modifier
+        )
+        .then(interactionModifier)
+
+    Box(modifier = baseModifier) {
+        if (popupMode) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                // The compact capsule remains around the cutout while the card opens below it.
+                val compactShape = RoundedCornerShape(minOf(settings.cornerDp, compactHeight / 2).dp)
+                Box(
+                    Modifier
+                        .width(compactWidth.dp)
+                        .height(compactHeight.dp)
+                        .clip(compactShape)
+                        .background(Color.Black)
+                        .then(
+                            if (settings.glow && event != null)
+                                Modifier.border(1.dp, accent.copy(alpha = 0.65f), compactShape)
+                            else Modifier
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (event != null) CompactContent(event, settings.widthDp, compactHeight.dp, accent, settings.privacyMode)
+                }
+                Spacer(Modifier.height(8.dp))
+                val popupShape = RoundedCornerShape(28.dp)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(popupShape)
+                        .background(Color.Black)
+                        .then(
+                            if (settings.glow && event != null)
+                                Modifier.border(1.dp, accent.copy(alpha = 0.65f), popupShape)
+                            else Modifier
+                        )
+                ) {
+                    ExpandedContent(
+                        event = event,
+                        allEvents = events,
+                        count = events.size,
+                        selected = safeIndex,
+                        topPad = 12.dp,
+                        accent = accent,
+                        settings = settings,
+                        tab = selectedTab,
+                        onTabChange = { selectedTab = it }
+                    )
+                }
+            }
+        } else {
+            Crossfade(
+                targetState = ContentKey(mode, event?.id),
+                animationSpec = tween(animationDuration),
+                label = "content"
+            ) { key ->
+                when (key.mode) {
+                    Mode.IDLE -> Box(Modifier.fillMaxWidth())
+                    Mode.COMPACT -> if (event != null) {
+                        CompactContent(event, settings.widthDp, h, accent, settings.privacyMode)
+                    }
+                    Mode.EXPANDED -> ExpandedContent(
+                        event = event,
+                        allEvents = events,
+                        count = events.size,
+                        selected = safeIndex,
+                        topPad = settings.heightDp.dp + 2.dp,
+                        accent = accent,
+                        settings = settings,
+                        tab = selectedTab,
+                        onTabChange = { selectedTab = it }
+                    )
+                }
             }
         }
     }
 }
 
+private enum class IslandTab(val label: String) {
+    HOME("Home"), MUSIC("Music"), NOTIFICATIONS("Notifs"), CONTROLS("Controls"), EVENTS("Events"), CUSTOMIZE("Style")
+}
+
 // ------------------------------------------------------------------ compact
 
 @Composable
-private fun CompactContent(e: IslandEvent, gapDp: Int, height: Dp, accent: Color) {
+private fun CompactContent(e: IslandEvent, gapDp: Int, height: Dp, accent: Color, privacyMode: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -283,7 +355,7 @@ private fun CompactContent(e: IslandEvent, gapDp: Int, height: Dp, accent: Color
             Modifier
                 .weight(1f)
                 .padding(end = 14.dp), contentAlignment = Alignment.CenterEnd
-        ) { RightInfo(e, accent) }
+        ) { RightInfo(e, accent, privacyMode) }
     }
 }
 
@@ -308,7 +380,7 @@ private fun LeftIcon(e: IslandEvent) {
 }
 
 @Composable
-private fun RightInfo(e: IslandEvent, accent: Color) {
+private fun RightInfo(e: IslandEvent, accent: Color, privacyMode: Boolean) {
     when (e) {
         is IslandEvent.Notif -> {
             if (e.progress >= 0) {
@@ -320,7 +392,7 @@ private fun RightInfo(e: IslandEvent, accent: Color) {
                     trackColor = Color(0x33FFFFFF)
                 )
             } else {
-                SmallText(e.title.ifBlank { e.appName }, Color.White)
+                SmallText(if (privacyMode) e.appName else e.title.ifBlank { e.appName }, Color.White)
             }
         }
         is IslandEvent.Call -> SmallText(if (e.incoming) "Incoming" else "On call", Color(0xFF4CAF50))
@@ -394,27 +466,186 @@ fun AudioVisualizerBars(playing: Boolean, color: Color) {
 
 @Composable
 private fun ExpandedContent(
-    event: IslandEvent?, count: Int, selected: Int, topPad: Dp, accent: Color
+    event: IslandEvent?,
+    allEvents: List<IslandEvent>,
+    count: Int,
+    selected: Int,
+    topPad: Dp,
+    accent: Color,
+    settings: IslandSettings,
+    tab: IslandTab,
+    onTabChange: (IslandTab) -> Unit
 ) {
     val ctx = LocalContext.current
     Column(
         Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(start = 18.dp, end = 18.dp, top = topPad, bottom = 16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = topPad, bottom = 16.dp)
     ) {
-        when (event) {
-            null -> ToolsPanel(accent)
-            is IslandEvent.Call -> CallCard(event, ctx)
-            is IslandEvent.Battery -> BatteryCard(event, accent)
-            is IslandEvent.Timer -> TimerCard(event)
-            is IslandEvent.Media -> MediaCard(event, accent)
-            is IslandEvent.Notif -> NotifCard(event, ctx, accent)
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IslandTab.values().forEach { item ->
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(if (item == tab) accent else Chip)
+                        .clickable { onTabChange(item) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        item.label,
+                        color = if (item == tab) Color.Black else Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                }
+            }
         }
-        if (count > 1) {
-            Spacer(Modifier.height(12.dp))
-            QueueDots(count, selected)
+        Spacer(Modifier.height(14.dp))
+
+        when (tab) {
+            IslandTab.HOME -> {
+                when (event) {
+                    null -> ToolsPanel(accent)
+                    is IslandEvent.Call -> CallCard(event, ctx)
+                    is IslandEvent.Battery -> BatteryCard(event, accent)
+                    is IslandEvent.Timer -> TimerCard(event)
+                    is IslandEvent.Media -> MediaCard(event, accent)
+                    is IslandEvent.Notif -> NotifCard(event, ctx, accent, settings.privacyMode)
+                }
+                if (count > 1) {
+                    Spacer(Modifier.height(12.dp))
+                    QueueDots(count, selected)
+                }
+            }
+            IslandTab.MUSIC -> {
+                val media = allEvents.filterIsInstance<IslandEvent.Media>().firstOrNull()
+                if (media == null) EmptyTab("No active music", "Start playback in a media app that exposes Android media controls.")
+                else MediaCard(media, accent)
+            }
+            IslandTab.NOTIFICATIONS -> {
+                val notifications = allEvents.filterIsInstance<IslandEvent.Notif>()
+                if (notifications.isEmpty()) EmptyTab("No active notifications", "New eligible notifications appear here briefly.")
+                else notifications.forEach { NotificationListItem(it, ctx, accent, settings.privacyMode) }
+            }
+            IslandTab.CONTROLS -> ToolsPanel(accent)
+            IslandTab.EVENTS -> {
+                if (allEvents.isEmpty()) EmptyTab("Nothing happening", "Calls, music, charging and notifications appear here when active.")
+                else allEvents.forEach { EventSummaryRow(it, settings.privacyMode) }
+            }
+            IslandTab.CUSTOMIZE -> CustomizePanel(settings)
         }
+    }
+}
+
+@Composable
+private fun EmptyTab(title: String, subtitle: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(5.dp))
+        Text(subtitle, color = Gray, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
+@Composable
+private fun NotificationListItem(e: IslandEvent.Notif, ctx: Context, accent: Color, privacyMode: Boolean) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            .clip(RoundedCornerShape(18.dp)).background(Color(0xFF18181D)).padding(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            BitmapIcon(e.icon, Icons.Filled.Notifications, size = 36.dp, round = 10.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(e.appName, color = Gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (privacyMode) {
+                    Text("Notification content hidden", color = Color.White, fontSize = 13.sp)
+                } else {
+                    if (e.title.isNotBlank()) Text(e.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (e.text.isNotBlank()) Text(e.text, color = Color(0xFFDDDDDD), fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill("Open", accent, Color.Black) {
+                e.open.fire(ctx)
+                PriorityEngine.remove(e.id)
+            }
+            Pill("Dismiss", Chip, Color.White) { PriorityEngine.remove(e.id) }
+        }
+    }
+}
+
+@Composable
+private fun EventSummaryRow(e: IslandEvent, privacyMode: Boolean) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF18181D)).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Chip), contentAlignment = Alignment.Center) {
+            LeftIcon(e)
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            val heading = when (e) {
+                is IslandEvent.Call -> e.caller.ifBlank { "Call" }
+                is IslandEvent.Battery -> if (e.charging) "Charging" else "Battery low"
+                is IslandEvent.Timer -> if (e.countdown) "Timer" else "Stopwatch"
+                is IslandEvent.Media -> e.title
+                is IslandEvent.Notif -> e.appName
+            }
+            val detail = when (e) {
+                is IslandEvent.Call -> if (e.incoming) "Incoming call" else "Call in progress"
+                is IslandEvent.Battery -> "${e.percent}%"
+                is IslandEvent.Timer -> fmt(e.seconds)
+                is IslandEvent.Media -> e.artist
+                is IslandEvent.Notif -> if (privacyMode) "Notification content hidden" else e.title.ifBlank { e.text }
+            }
+            Text(heading, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(detail, color = Gray, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun CustomizePanel(settings: IslandSettings) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repo = (ctx.applicationContext as? IslandXApp)?.settings
+    Column(Modifier.fillMaxWidth()) {
+        Text("Accent colour", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            AccentColors.forEachIndexed { i, color ->
+                Box(
+                    Modifier.size(if (i == settings.accentIndex) 36.dp else 30.dp)
+                        .clip(CircleShape).background(color)
+                        .then(if (i == settings.accentIndex) Modifier.border(2.dp, Color.White, CircleShape) else Modifier)
+                        .clickable { repo?.let { r -> scope.launch { r.set(K.ACCENT, i) } } }
+                )
+            }
+        }
+        OverlaySwitchRow("Glow border", settings.glow) { value ->
+            repo?.let { r -> scope.launch { r.set(K.GLOW, value) } }
+        }
+        OverlaySwitchRow("Haptic feedback", settings.haptics) { value ->
+            repo?.let { r -> scope.launch { r.set(K.HAPTICS, value) } }
+        }
+        Text("More size, position, privacy and expansion settings are in the main IslandX app.", color = Gray, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun OverlaySwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Color.White, modifier = Modifier.weight(1f), fontSize = 13.sp)
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 
@@ -493,23 +724,27 @@ private fun actionColor(title: String, index: Int, incoming: Boolean): Color {
 }
 
 @Composable
-private fun NotifCard(e: IslandEvent.Notif, ctx: Context, accent: Color) {
+private fun NotifCard(e: IslandEvent.Notif, ctx: Context, accent: Color, privacyMode: Boolean) {
     Row(verticalAlignment = Alignment.Top) {
         BitmapIcon(e.icon, Icons.Filled.Notifications, size = 40.dp, round = 12.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(e.appName, color = Gray, fontSize = 12.sp, maxLines = 1)
-            if (e.title.isNotBlank()) {
-                Text(
-                    e.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (e.text.isNotBlank()) {
-                Text(
-                    e.text, color = Color(0xFFDDDDDD), fontSize = 14.sp,
-                    maxLines = 3, overflow = TextOverflow.Ellipsis
-                )
+            if (privacyMode) {
+                Text("Notification content hidden", color = Color.White, fontSize = 13.sp)
+            } else {
+                if (e.title.isNotBlank()) {
+                    Text(
+                        e.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (e.text.isNotBlank()) {
+                    Text(
+                        e.text, color = Color(0xFFDDDDDD), fontSize = 14.sp,
+                        maxLines = 3, overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

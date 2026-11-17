@@ -34,6 +34,9 @@ data class IslandSettings(
     val showBattery: Boolean = true,
     val hideInLandscape: Boolean = true,
     val accentIndex: Int = 0,
+    val expansionMode: Int = 0, // 0 = expand in place, 1 = separate popup card
+    val animationStyle: Int = 0, // 0 = smooth, 1 = snappy, 2 = reduced motion
+    val privacyMode: Boolean = false,
     val blockedApps: Set<String> = emptySet()
 )
 
@@ -52,6 +55,9 @@ object K {
     val BATTERY = booleanPreferencesKey("battery")
     val HIDE_LANDSCAPE = booleanPreferencesKey("hide_landscape")
     val ACCENT = intPreferencesKey("accent")
+    val EXPANSION_MODE = intPreferencesKey("expansion_mode")
+    val ANIMATION_STYLE = intPreferencesKey("animation_style")
+    val PRIVACY_MODE = booleanPreferencesKey("privacy_mode")
     val BLOCKED = stringSetPreferencesKey("blocked_apps")
 }
 
@@ -97,6 +103,9 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             showBattery = this[K.BATTERY] ?: d.showBattery,
             hideInLandscape = this[K.HIDE_LANDSCAPE] ?: d.hideInLandscape,
             accentIndex = this[K.ACCENT] ?: d.accentIndex,
+            expansionMode = (this[K.EXPANSION_MODE] ?: d.expansionMode).coerceIn(0, 1),
+            animationStyle = (this[K.ANIMATION_STYLE] ?: d.animationStyle).coerceIn(0, 2),
+            privacyMode = this[K.PRIVACY_MODE] ?: d.privacyMode,
             blockedApps = this[K.BLOCKED] ?: d.blockedApps
         )
     }
