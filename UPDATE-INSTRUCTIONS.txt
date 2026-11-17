@@ -1,0 +1,11 @@
+IslandX v1.2.1 — update instructions
+
+If your GitHub main branch already contains the v1.2.0 update, replace ONLY these four files at the same paths:
+1. app/build.gradle.kts
+2. app/src/main/java/com/islandx/app/domain/MediaBridge.kt
+3. app/src/main/java/com/islandx/app/service/IslandOverlayService.kt
+4. app/src/main/java/com/islandx/app/ui/overlay/IslandOverlay.kt
+
+Keep the existing .git folder. Do not copy the entire source ZIP over your project. Commit the four files to main, then open GitHub Actions and check the Build APK workflow.
+
+Build/testing note: this source patch was reviewed, but an Android Gradle build could not be run in this environment. Check the GitHub Actions result and test on the phone. For music controls, Android Settings > Apps > Special app access > Notification access must allow IslandX; the active music app must expose an Android media session. Some apps do not support seeking or 10-second jumps.

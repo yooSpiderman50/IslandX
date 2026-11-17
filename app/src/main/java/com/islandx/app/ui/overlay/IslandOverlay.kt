@@ -51,6 +51,8 @@ import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
@@ -64,11 +66,13 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -255,7 +259,9 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                 )
             } else Modifier
         )
-        .then(interactionModifier)
+        // Parent-level pointer handlers consume pointer events. Keep them on the
+        // compact capsule only; otherwise they block buttons and the seek slider.
+        .then(if (!isExpanded) interactionModifier else Modifier)
 
     Box(modifier = baseModifier) {
         if (popupMode) {
@@ -272,7 +278,8 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                             if (settings.glow && event != null)
                                 Modifier.border(1.dp, accent.copy(alpha = 0.65f), compactShape)
                             else Modifier
-                        ),
+                        )
+                        .then(if (popupMode) interactionModifier else Modifier),
                     contentAlignment = Alignment.Center
                 ) {
                     if (event != null) CompactContent(event, settings.widthDp, compactHeight.dp, accent, settings.privacyMode)
@@ -299,7 +306,8 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                         accent = accent,
                         settings = settings,
                         tab = selectedTab,
-                        onTabChange = { selectedTab = it }
+                        onTabChange = { selectedTab = it },
+                        onClose = { expanded = false; buzz() }
                     )
                 }
             }
@@ -323,7 +331,8 @@ fun IslandOverlay(settings: IslandSettings, events: List<IslandEvent>) {
                         accent = accent,
                         settings = settings,
                         tab = selectedTab,
-                        onTabChange = { selectedTab = it }
+                        onTabChange = { selectedTab = it },
+                        onClose = { expanded = false; buzz() }
                     )
                 }
             }
@@ -474,7 +483,8 @@ private fun ExpandedContent(
     accent: Color,
     settings: IslandSettings,
     tab: IslandTab,
-    onTabChange: (IslandTab) -> Unit
+    onTabChange: (IslandTab) -> Unit,
+    onClose: () -> Unit
 ) {
     val ctx = LocalContext.current
     Column(
@@ -484,26 +494,42 @@ private fun ExpandedContent(
             .padding(start = 16.dp, end = 16.dp, top = topPad, bottom = 16.dp)
     ) {
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IslandTab.values().forEach { item ->
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(if (item == tab) accent else Chip)
-                        .clickable { onTabChange(item) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        item.label,
-                        color = if (item == tab) Color.Black else Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
-                    )
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IslandTab.values().forEach { item ->
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (item == tab) accent else Chip)
+                            .clickable { onTabChange(item) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            item.label,
+                            color = if (item == tab) Color.Black else Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                    }
                 }
+            }
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Chip)
+                    .clickable { onClose() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("×", color = Color.White, fontSize = 22.sp, lineHeight = 22.sp)
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -854,43 +880,79 @@ private fun MediaCard(e: IslandEvent.Media, accent: Color) {
                 e.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
-            Text(e.artist, color = Gray, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(e.artist.ifBlank { "Unknown artist" }, color = Gray, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         AudioVisualizerBars(e.playing, accent)
     }
 
-    var pos by remember(e) { mutableLongStateOf(e.positionMs) }
-    LaunchedEffect(e) {
+    val duration = e.durationMs.coerceAtLeast(0L)
+    var pos by remember(e.title, e.artist, e.durationMs) {
+        mutableLongStateOf(e.positionMs.coerceAtLeast(0L))
+    }
+    var isSeeking by remember { mutableStateOf(false) }
+
+    LaunchedEffect(e.title, e.artist, e.durationMs, e.positionMs, e.updatedAt, e.playing, e.speed) {
         while (true) {
-            pos = if (e.playing)
-                e.positionMs + ((SystemClock.elapsedRealtime() - e.updatedAt) * e.speed).toLong()
-            else e.positionMs
+            if (!isSeeking) {
+                val estimated = if (e.playing) {
+                    e.positionMs.coerceAtLeast(0L) +
+                        ((SystemClock.elapsedRealtime() - e.updatedAt).coerceAtLeast(0L) * e.speed).toLong()
+                } else e.positionMs.coerceAtLeast(0L)
+                pos = if (duration > 0L) estimated.coerceIn(0L, duration) else estimated
+            }
             if (!e.playing) break
-            delay(500)
+            delay(300)
         }
     }
-    val fraction = if (e.durationMs > 0) (pos.toFloat() / e.durationMs).coerceIn(0f, 1f) else 0f
-    Spacer(Modifier.height(12.dp))
-    LinearProgressIndicator(
-        progress = { fraction },
-        modifier = Modifier.fillMaxWidth(),
-        color = accent,
-        trackColor = Color(0x33FFFFFF)
-    )
-    Spacer(Modifier.height(8.dp))
+
+    Spacer(Modifier.height(10.dp))
+    if (duration > 0L) {
+        Slider(
+            value = pos.coerceIn(0L, duration).toFloat(),
+            onValueChange = { value -> isSeeking = true; pos = value.toLong() },
+            onValueChangeFinished = {
+                MediaBridge.seekTo(pos)
+                isSeeking = false
+            },
+            valueRange = 0f..duration.toFloat(),
+            enabled = true
+        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(formatMediaTime(pos), color = Gray, fontSize = 11.sp)
+            Spacer(Modifier.weight(1f))
+            Text(formatMediaTime(duration), color = Gray, fontSize = 11.sp)
+        }
+    } else {
+        LinearProgressIndicator(
+            progress = { 0f },
+            modifier = Modifier.fillMaxWidth(),
+            color = accent,
+            trackColor = Color(0x33FFFFFF)
+        )
+        Text("Track position unavailable", color = Gray, fontSize = 11.sp)
+    }
+
+    Spacer(Modifier.height(10.dp))
     Row(
         Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RoundButton(Icons.Filled.SkipPrevious) { MediaBridge.previous() }
-        Spacer(Modifier.width(16.dp))
-        RoundButton(if (e.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, 54.dp) {
+        RoundButton(Icons.Filled.SkipPrevious, 42.dp) { MediaBridge.previous() }
+        RoundButton(Icons.Filled.FastRewind, 42.dp) { MediaBridge.seekBy(-10_000L) }
+        RoundButton(if (e.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, 52.dp) {
             MediaBridge.playPause()
         }
-        Spacer(Modifier.width(16.dp))
-        RoundButton(Icons.Filled.SkipNext) { MediaBridge.next() }
+        RoundButton(Icons.Filled.FastForward, 42.dp) { MediaBridge.seekBy(10_000L) }
+        RoundButton(Icons.Filled.SkipNext, 42.dp) { MediaBridge.next() }
     }
+    Spacer(Modifier.height(4.dp))
+    Text("Previous · −10s · Play/Pause · +10s · Next", color = Gray, fontSize = 10.sp)
+}
+
+private fun formatMediaTime(ms: Long): String {
+    val totalSeconds = ms.coerceAtLeast(0L) / 1000L
+    return "%d:%02d".format(Locale.US, totalSeconds / 60L, totalSeconds % 60L)
 }
 
 /** Shown when you expand the island while nothing is happening: clock + quick toggles. */
