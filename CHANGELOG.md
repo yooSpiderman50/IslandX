@@ -1,16 +1,19 @@
 # Changelog
 
-## 1.2.3 (media visibility fix)
+## 1.2.3 (cutout position fix)
 
-- Keep the music event visible when an active media session does not publish metadata immediately.
-- Prefer a playing or paused media session over unrelated/stale sessions returned by Android.
-- Treat buffering/connecting/fast-forwarding/rewinding as active playback for capsule visibility.
-- Updated version metadata to `1.2.3` / `versionCode 5`.
+- Removed the extra 6dp vertical clearance that pushed the overlay below the camera cutout.
+- Made the default vertical offset 0dp; users can still adjust the island position in settings.
+- Kept the existing overlay type, Compose gestures, and tap handling unchanged.
+
+### Important limitation
+
+This patch improves vertical positioning only. A normal `TYPE_APPLICATION_OVERLAY` cannot reliably draw above Android's system status-bar icons. Switching to `TYPE_ACCESSIBILITY_OVERLAY` requires a real `AccessibilityService` and user-enabled Accessibility permission; it is not safe to do by changing a single line. This patch does not yet add that service.
 
 ### Validation status
 
-- Source-level checks passed for the updated media-session selection and nullable metadata handling.
-- A full Android Gradle build and physical-device test have not been run in this environment. Run the GitHub Actions `Build APK` workflow before installing.
+- Source changes inspected.
+- Android Gradle build and physical-device test have not been run in this environment.
 
 ## 1.2.0 (development update)
 

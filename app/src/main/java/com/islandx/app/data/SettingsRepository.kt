@@ -24,7 +24,7 @@ data class IslandSettings(
     val widthDp: Int = 120,
     val heightDp: Int = 34,
     val offsetX: Int = 0,
-    val offsetY: Int = 6,
+    val offsetY: Int = 0,
     val cornerDp: Int = 20,
     val haptics: Boolean = true,
     val glow: Boolean = true,

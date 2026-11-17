@@ -197,12 +197,13 @@ class IslandOverlayService : Service() {
         val maxOffsetXDp = ((screenWidthDp - expandedWidthDp) / 2).coerceAtLeast(0)
         val safeX = s.offsetX.coerceIn(-maxOffsetXDp, maxOffsetXDp)
         val screenHeightDp = resources.configuration.screenHeightDp.coerceAtLeast(1)
-        // Application overlays cannot hide Android's status-bar icons. A small base
-        // clearance reduces collisions with the icon row on devices with tall status bars.
-        val statusBarClearanceDp = 6
-        val safeY = s.offsetY.coerceIn(0, (screenHeightDp - 80 - statusBarClearanceDp).coerceAtLeast(0))
+        // The overlay window is already allowed into the display cutout above.
+        // Do not add an extra status-bar clearance here: it pushes the island down
+        // from the top edge and can make it sit below the camera cutout. offsetY is
+        // the user's complete vertical adjustment, in dp.
+        val safeY = s.offsetY.coerceIn(0, (screenHeightDp - 80).coerceAtLeast(0))
         params.x = (safeX * d).toInt()
-        params.y = ((safeY + statusBarClearanceDp) * d).toInt()
+        params.y = (safeY * d).toInt()
     }
 
     private fun applySettings(s: IslandSettings) {
