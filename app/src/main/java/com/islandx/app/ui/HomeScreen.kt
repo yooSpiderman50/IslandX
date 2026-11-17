@@ -65,6 +65,7 @@ import com.islandx.app.domain.CutoutHelper
 import com.islandx.app.domain.IslandEvent
 import com.islandx.app.domain.PriorityEngine
 import com.islandx.app.domain.TimerController
+import com.islandx.app.service.IslandAccessibilityService
 import com.islandx.app.service.IslandOverlayService
 import com.islandx.app.ui.overlay.AccentColors
 import com.islandx.app.ui.overlay.AccentNames
@@ -90,6 +91,9 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
     ) { localTick++ }
 
     val overlayOk = remember(tick, localTick) { Settings.canDrawOverlays(activity) }
+    val accessibilityOk = remember(tick, localTick) {
+        IslandAccessibilityService.isEnabled(activity)
+    }
     val listenerOk = remember(tick, localTick) {
         NotificationManagerCompat.getEnabledListenerPackages(activity).contains(activity.packageName)
     }
@@ -150,10 +154,17 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
 
             // ---- setup
             Block("Setup (do these once)") {
-                PermRow("Display over other apps", "Needed to draw the island", overlayOk) {
+                PermRow("Display over other apps", "Fallback overlay permission", overlayOk) {
                     activity.startActivity(
                         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${activity.packageName}"))
                     )
+                }
+                PermRow(
+                    "Accessibility overlay (recommended to test)",
+                    "May improve island layer order; Android may still place system UI above it",
+                    accessibilityOk
+                ) {
+                    activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
                 PermRow("Notification access", "Notifications, music and calls", listenerOk) {
                     activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))

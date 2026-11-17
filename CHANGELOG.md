@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.4 (accessibility overlay experiment)
+
+- Added a real `AccessibilityService` that can host the existing Compose island with `TYPE_ACCESSIBILITY_OVERLAY`.
+- Added an Accessibility settings row in the app; the user must explicitly enable the service.
+- Prevented the regular application overlay and accessibility overlay from intentionally displaying at the same time.
+- Reused existing island UI, media controls, gestures, settings, and event queue.
+- Preserved the regular “Display over other apps” overlay as a fallback when Accessibility Overlay is not enabled.
+- Updated app version metadata to `1.2.4` / `versionCode 6`.
+
+### Important limitation
+
+This is an implementation to test, not a guarantee that every Android status-bar icon, heads-up notification, or manufacturer-specific system window will appear behind the island. Accessibility overlays can affect window layering, but final behavior depends on Android version and device software. Enable the service only if you are comfortable granting an accessibility service; this service declares that it does not retrieve screen content.
+
+### Validation status
+
+- Manifest and accessibility XML files were parsed successfully.
+- Full Gradle build and physical-device testing have not been run in this environment. Build the APK with GitHub Actions first, then test on the target phone. If the build fails, share the exact Actions error log.
+
+
 ## 1.2.3 (cutout position fix)
 
 - Removed the extra 6dp vertical clearance that pushed the overlay below the camera cutout.

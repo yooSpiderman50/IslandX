@@ -29,13 +29,14 @@ Swipe left/right: queue me next (ya dismiss) | Double-tap: dismiss
 APK: app/build/outputs/apk/debug/app-debug.apk
 
 ## Install ke baad
-1. Display over other apps > ON
-2. Notification access > ON (greyed ho to: App info > ⋮ > Allow restricted settings)
-3. Battery > Unrestricted
-4. "Auto-detect camera position" dabao, phir sliders se fine-tune karo.
+1. Display over other apps > ON (fallback overlay)
+2. Accessibility overlay > enable "IslandX Overlay" only if you want to test improved window layering
+3. Notification access > ON (greyed ho to: App info > ⋮ > Allow restricted settings)
+4. Battery > Unrestricted
+5. "Auto-detect camera position" dabao, phir sliders se fine-tune karo.
 
 ## Limitations
-- Android lock screen / system UI ke upar overlay nahi ban sakta (ya sirf kuch phones me hota hai).
+- Accessibility Overlay may improve layer order, but Android/device-specific system UI and heads-up notifications can still appear above the island. Verify on your own phone.
 - Fullscreen video/game auto-hide abhi nahi hai (sirf landscape hide hai).
 - Notification quick-reply, privacy dots (mic/camera) aur Maps-specific UI abhi nahi hain.
 - Call buttons tabhi aate hain jab dialer ki call notification me Answer/Decline buttons ho.
@@ -57,3 +58,11 @@ APK: app/build/outputs/apk/debug/app-debug.apk
 - Version updated to `1.1.0` (`versionCode` 2).
 
 This source update should be built and tested with GitHub Actions and on a physical Android device. System pop-up placement is controlled partly by Android and the device manufacturer, so overlap behavior must be verified on the target phone.
+
+## Version 1.2.4 update notes
+
+- Added an optional AccessibilityService-backed overlay using `TYPE_ACCESSIBILITY_OVERLAY`.
+- Added an Accessibility settings shortcut in the app.
+- The regular application overlay is suppressed while the accessibility overlay is enabled to avoid duplicate islands.
+- Accessibility permission is optional and must be enabled manually by the user.
+- Android Gradle build and physical-device behavior have not yet been verified; build with GitHub Actions and test on the target device.

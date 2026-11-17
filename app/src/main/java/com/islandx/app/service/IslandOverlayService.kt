@@ -80,6 +80,19 @@ class IslandOverlayService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val repo get() = (application as IslandXApp).settings
     private var receiverRegistered = false
+    private var accessibilityReceiverRegistered = false
+
+    private val accessibilityModeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (!::wm.isInitialized) return
+            if (IslandAccessibilityService.isEnabled(this@IslandOverlayService)) {
+                removeOverlay()
+            } else if (repo.state.value.enabled && Settings.canDrawOverlays(this@IslandOverlayService)) {
+                if (composeView == null) addOverlay()
+                applySettings(repo.state.value)
+            }
+        }
+    }
 
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -111,7 +124,13 @@ class IslandOverlayService : Service() {
         }
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         owner.start()
-        addOverlay()
+        if (!IslandAccessibilityService.isEnabled(this)) addOverlay()
+
+        val accessibilityFilter = IntentFilter(IslandAccessibilityService.ACTION_OVERLAY_MODE_CHANGED)
+        ContextCompat.registerReceiver(
+            this, accessibilityModeReceiver, accessibilityFilter, ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        accessibilityReceiverRegistered = true
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_POWER_CONNECTED)
@@ -148,6 +167,7 @@ class IslandOverlayService : Service() {
     }
 
     private fun addOverlay() {
+        if (composeView != null || IslandAccessibilityService.isEnabled(this)) return
         // FLAG_NOT_FOCUSABLE + FLAG_NOT_TOUCH_MODAL: touches outside the island pass through to the app below.
         // WRAP_CONTENT: the window is exactly as big as the island, so nothing else is blocked.
         params = WindowManager.LayoutParams(
@@ -188,6 +208,16 @@ class IslandOverlayService : Service() {
         wm.addView(view, params)
     }
 
+    private fun removeOverlay() {
+        composeView?.let {
+            try {
+                if (it.isAttachedToWindow) wm.removeView(it)
+            } catch (_: Exception) {
+            }
+        }
+        composeView = null
+    }
+
     private fun applyPosition(s: IslandSettings) {
         val d = resources.displayMetrics.density
         // Keep the expanded island inside the visible display area. The expanded card can
@@ -208,12 +238,20 @@ class IslandOverlayService : Service() {
 
     private fun applySettings(s: IslandSettings) {
         if (!s.enabled) {
+            removeOverlay()
             stopSelf()
             return
         }
         if (!s.showBattery) PriorityEngine.remove("battery")
-        applyPosition(s)
+        // Never show two copies of the island. The accessibility service owns the
+        // window when the user has enabled it in Android Settings.
+        if (IslandAccessibilityService.isEnabled(this)) {
+            removeOverlay()
+            return
+        }
+        if (composeView == null) addOverlay()
         val v = composeView ?: return
+        applyPosition(s)
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         v.visibility = if (landscape && s.hideInLandscape) View.GONE else View.VISIBLE
         if (v.isAttachedToWindow) wm.updateViewLayout(v, params)
@@ -229,10 +267,10 @@ class IslandOverlayService : Service() {
         if (receiverRegistered) {
             try { unregisterReceiver(powerReceiver) } catch (_: Exception) {}
         }
-        if (::wm.isInitialized) {
-            composeView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        if (accessibilityReceiverRegistered) {
+            try { unregisterReceiver(accessibilityModeReceiver) } catch (_: Exception) {}
         }
-        composeView = null
+        if (::wm.isInitialized) removeOverlay()
         owner.stop()
         super.onDestroy()
     }
