@@ -23,7 +23,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -40,6 +39,11 @@ class IslandNotificationListener : NotificationListenerService() {
     private lateinit var component: ComponentName
     private var sessionListenerAdded = false
     private val iconCache = HashMap<String, Bitmap?>()
+    private val labelCache = HashMap<String, String>()
+
+    // Album-art scaling cache: createScaledBitmap used to run on every media update.
+    private var lastArtSource: Bitmap? = null
+    private var lastArtScaled: Bitmap? = null
     private val listenerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var settingsJob: Job? = null
     private var lastSettings: IslandSettings? = null
@@ -101,6 +105,14 @@ class IslandNotificationListener : NotificationListenerService() {
     private fun onSettingsChanged(s: IslandSettings) {
         val previous = lastSettings
         lastSettings = s
+        // Sliders write to DataStore many times per second while dragging. Only do the (not
+        // free) event cleanup when a setting that actually affects events changed.
+        if (previous != null &&
+            previous.showMedia == s.showMedia &&
+            previous.showCalls == s.showCalls &&
+            previous.showNotifications == s.showNotifications &&
+            previous.blockedApps == s.blockedApps
+        ) return
         if (!s.showMedia || controller?.packageName?.let { it in s.blockedApps } == true) {
             PriorityEngine.remove("media")
         } else {
@@ -135,17 +147,32 @@ class IslandNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
         // Some Android/OEM builds don't reliably notify the active-session listener when
-        // a media app starts. Refresh sessions when its notification changes as a fallback.
-        refreshMediaSessions()
+        // a media app starts. Refresh sessions when a MEDIA notification changes as a fallback.
+        // (Refreshing for every notification made progress/download notifications that update
+        // several times per second hammer MediaSessionManager and rescale album art each time.)
+        if (isMediaNotification(sbn)) refreshMediaSessions()
         handle(sbn, initial = false)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         sbn ?: return
         PriorityEngine.remove(keyOf(sbn))
-        if (sbn.notification.category == Notification.CATEGORY_CALL) PriorityEngine.remove("call")
+        if (sbn.notification.category == Notification.CATEGORY_CALL) {
+            // Only drop the call card when it is the call app's notification that went away
+            // (a "missed call" notification from the dialer must not kill an active call).
+            val call = PriorityEngine.events.value.filterIsInstance<IslandEvent.Call>().firstOrNull()
+            if (call != null && (call.packageName.isEmpty() || call.packageName == sbn.packageName)) {
+                PriorityEngine.remove("call")
+            }
+        }
         // A media app may replace its notification/session while switching tracks.
-        refreshMediaSessions()
+        if (isMediaNotification(sbn)) refreshMediaSessions()
+    }
+
+    private fun isMediaNotification(sbn: StatusBarNotification): Boolean {
+        val n = sbn.notification
+        return n.category == Notification.CATEGORY_TRANSPORT ||
+            n.extras.getString(Notification.EXTRA_TEMPLATE).orEmpty().contains("Media")
     }
 
     private fun refreshMediaSessions() {
@@ -262,10 +289,12 @@ class IslandNotificationListener : NotificationListenerService() {
         return bmp
     }
 
-    private fun labelFor(pkg: String): String = try {
-        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
-    } catch (_: Exception) {
-        pkg
+    private fun labelFor(pkg: String): String = labelCache.getOrPut(pkg) {
+        try {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+        } catch (_: Exception) {
+            pkg
+        }
     }
 
     // ---------------------------------------------------------------- media
@@ -274,7 +303,9 @@ class IslandNotificationListener : NotificationListenerService() {
         val pick = list?.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
             ?: list?.firstOrNull()
         if (pick?.sessionToken == controller?.sessionToken) {
-            publishMedia()
+            // Same session: MediaController.Callback already republishes on every change.
+            // Only the very first attach (no event yet) needs a publish.
+            if (PriorityEngine.events.value.none { it is IslandEvent.Media }) publishMedia()
             return
         }
         controller?.unregisterCallback(mediaCallback)
@@ -309,7 +340,7 @@ class IslandNotificationListener : NotificationListenerService() {
                     ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE) ?: "Unknown",
                 artist = md.getString(MediaMetadata.METADATA_KEY_ARTIST)
                     ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE) ?: "",
-                art = art?.limit(256),
+                art = scaledArt(art),
                 playing = playing,
                 positionMs = st.position,
                 updatedAt = if (st.lastPositionUpdateTime > 0) st.lastPositionUpdateTime
@@ -319,6 +350,16 @@ class IslandNotificationListener : NotificationListenerService() {
             ),
             ttlMs = if (playing) 0L else 30_000L // paused media disappears after 30s
         )
+    }
+
+    /** Returns a <=256px version of [src], re-using the previous result for the same bitmap. */
+    private fun scaledArt(src: Bitmap?): Bitmap? {
+        if (src == null) return null
+        if (src === lastArtSource) return lastArtScaled
+        val scaled = src.limit(256)
+        lastArtSource = src
+        lastArtScaled = scaled
+        return scaled
     }
 
     private fun Bitmap.limit(max: Int): Bitmap {

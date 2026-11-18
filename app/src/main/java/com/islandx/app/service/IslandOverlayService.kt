@@ -11,95 +11,59 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
-import android.graphics.PixelFormat
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
-import android.view.Gravity
-import android.view.View
 import android.view.WindowManager
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.islandx.app.IslandXApp
 import com.islandx.app.R
 import com.islandx.app.data.IslandSettings
 import com.islandx.app.domain.IslandEvent
 import com.islandx.app.domain.PriorityEngine
 import com.islandx.app.ui.MainActivity
-import com.islandx.app.ui.overlay.IslandOverlay
-import com.islandx.app.ui.theme.IslandXTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-/** Lifecycle/SavedState/ViewModelStore owner so a ComposeView can live inside a Service window. */
-private class OverlayOwner : LifecycleOwner, SavedStateRegistryOwner, ViewModelStoreOwner {
-    private val registry = LifecycleRegistry(this)
-    private val controller = SavedStateRegistryController.create(this)
-    private val store = ViewModelStore()
-
-    override val lifecycle: Lifecycle get() = registry
-    override val savedStateRegistry: SavedStateRegistry get() = controller.savedStateRegistry
-    override val viewModelStore: ViewModelStore get() = store
-
-    fun start() {
-        controller.performRestore(null)
-        registry.currentState = Lifecycle.State.CREATED
-        registry.currentState = Lifecycle.State.RESUMED
-    }
-
-    fun stop() {
-        registry.currentState = Lifecycle.State.DESTROYED
-        store.clear()
-    }
-}
-
+/**
+ * Foreground service that hosts the regular "Display over other apps" island and listens for
+ * power events. When the accessibility overlay service is connected it hides its own window so
+ * only one island is ever visible.
+ *
+ * Fixes compared with 1.2.8:
+ *  - no more UninitializedPropertyAccessException: the old code touched `params` (lateinit) from
+ *    applyGlassBlur() even when the accessibility service was active and addOverlay() never ran;
+ *  - no more IllegalStateException in onDestroy() when the service stopped itself because the
+ *    overlay permission was missing (lifecycle owner was never started);
+ *  - the first settings are read from DataStore before the window is created, so the island does
+ *    not flash at the default position / style;
+ *  - "accessibility is active" now means the service is really CONNECTED, not just listed in
+ *    Settings.Secure (which made the island vanish if the service was enabled but not running).
+ */
 class IslandOverlayService : Service() {
 
-    private lateinit var wm: WindowManager
-    private lateinit var params: WindowManager.LayoutParams
-    private var composeView: ComposeView? = null
-    private val owner = OverlayOwner()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val repo get() = (application as IslandXApp).settings
-    private var receiverRegistered = false
-    private var accessibilityReceiverRegistered = false
+    private var window: OverlayWindow? = null
+    private var powerReceiverRegistered = false
+    private var modeReceiverRegistered = false
 
     private val accessibilityModeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (!::wm.isInitialized) return
-            if (IslandAccessibilityService.isEnabled(this@IslandOverlayService)) {
-                removeOverlay()
-            } else if (repo.state.value.enabled && Settings.canDrawOverlays(this@IslandOverlayService)) {
-                if (composeView == null) addOverlay()
-                applySettings(repo.state.value)
-            }
+            applySettings(repo.state.value)
         }
     }
 
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (!repo.state.value.showBattery) return
-            val bm = this@IslandOverlayService.getSystemService(BatteryManager::class.java)
-            val rawPct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            val pct = rawPct.coerceIn(0, 100)
+            val bm = getSystemService(BatteryManager::class.java) ?: return
+            val pct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).coerceIn(0, 100)
             when (intent.action) {
                 Intent.ACTION_POWER_CONNECTED ->
                     PriorityEngine.post(IslandEvent.Battery(pct, true), 5000L)
@@ -117,20 +81,25 @@ class IslandOverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Must be called within a few seconds of startForegroundService(), so do it first.
         startAsForeground()
         if (!Settings.canDrawOverlays(this)) {
             stopSelf()
             return
         }
-        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        owner.start()
-        if (!IslandAccessibilityService.isEnabled(this)) addOverlay()
-
-        val accessibilityFilter = IntentFilter(IslandAccessibilityService.ACTION_OVERLAY_MODE_CHANGED)
-        ContextCompat.registerReceiver(
-            this, accessibilityModeReceiver, accessibilityFilter, ContextCompat.RECEIVER_NOT_EXPORTED
+        window = OverlayWindow(
+            context = this,
+            windowType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            windowTitle = "IslandX",
+            settings = repo.state
         )
-        accessibilityReceiverRegistered = true
+
+        ContextCompat.registerReceiver(
+            this, accessibilityModeReceiver,
+            IntentFilter(IslandAccessibilityService.ACTION_OVERLAY_MODE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        modeReceiverRegistered = true
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_POWER_CONNECTED)
@@ -138,9 +107,11 @@ class IslandOverlayService : Service() {
             addAction(Intent.ACTION_BATTERY_LOW)
         }
         ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        receiverRegistered = true
+        powerReceiverRegistered = true
 
-        scope.launch { repo.state.collect { applySettings(it) } }
+        // repo.flow emits the REAL stored values first (repo.state starts with defaults), so the
+        // window is created once, at the right place and with the right style.
+        scope.launch { repo.flow.collect { applySettings(it) } }
     }
 
     private fun startAsForeground() {
@@ -166,126 +137,38 @@ class IslandOverlayService : Service() {
         }
     }
 
-    private fun addOverlay() {
-        if (composeView != null || IslandAccessibilityService.isEnabled(this)) return
-        // FLAG_NOT_FOCUSABLE + FLAG_NOT_TOUCH_MODAL: touches outside the island pass through to the app below.
-        // WRAP_CONTENT: the window is exactly as big as the island, so nothing else is blocked.
-        params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            title = "IslandX"
-            // Without this the window is pushed below the camera cutout instead of covering it.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            }
-        }
-
-        val view = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(owner)
-            setViewTreeViewModelStoreOwner(owner)
-            setViewTreeSavedStateRegistryOwner(owner)
-            setContent {
-                val settings by repo.state.collectAsState()
-                val events by PriorityEngine.events.collectAsState()
-                IslandXTheme {
-                    IslandOverlay(settings = settings, events = events)
-                }
-            }
-        }
-        composeView = view
-        applyPosition(repo.state.value)
-        wm.addView(view, params)
-    }
-
-    private fun removeOverlay() {
-        composeView?.let {
-            try {
-                if (it.isAttachedToWindow) wm.removeView(it)
-            } catch (_: Exception) {
-            }
-        }
-        composeView = null
-    }
-
-    private fun applyPosition(s: IslandSettings) {
-        val d = resources.displayMetrics.density
-        // Keep the expanded island inside the visible display area. The expanded card can
-        // be wider than the compact pill, so clamp offsets using its maximum width.
-        val screenWidthDp = resources.configuration.screenWidthDp.coerceAtLeast(1)
-        val expandedWidthDp = minOf((screenWidthDp - 24).coerceAtLeast(1), 380)
-        val maxOffsetXDp = ((screenWidthDp - expandedWidthDp) / 2).coerceAtLeast(0)
-        val safeX = s.offsetX.coerceIn(-maxOffsetXDp, maxOffsetXDp)
-        val screenHeightDp = resources.configuration.screenHeightDp.coerceAtLeast(1)
-        // The overlay window is already allowed into the display cutout above.
-        // Do not add an extra status-bar clearance here: it pushes the island down
-        // from the top edge and can make it sit below the camera cutout. offsetY is
-        // the user's complete vertical adjustment, in dp.
-        val safeY = s.offsetY.coerceIn(0, (screenHeightDp - 80).coerceAtLeast(0))
-        params.x = (safeX * d).toInt()
-        params.y = (safeY * d).toInt()
-    }
-
-    private fun applyGlassBlur(style: Int) {
-        if (!::wm.isInitialized) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (style == 0) {
-                params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-                params.blurBehindRadius = 32
-            } else {
-                params.blurBehindRadius = 0
-                params.flags = params.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
-            }
-        }
-    }
-
     private fun applySettings(s: IslandSettings) {
+        val w = window ?: return
         if (!s.enabled) {
-            removeOverlay()
+            w.hide()
             stopSelf()
             return
         }
-        applyGlassBlur(s.backgroundStyle)
         if (!s.showBattery) PriorityEngine.remove("battery")
-        // Never show two copies of the island. The accessibility service owns the
-        // window when the user has enabled it in Android Settings.
-        if (IslandAccessibilityService.isEnabled(this)) {
-            removeOverlay()
+        // Never show two copies of the island. A connected accessibility service owns the window.
+        if (IslandAccessibilityService.isActive) {
+            w.hide()
             return
         }
-        if (composeView == null) addOverlay()
-        val v = composeView ?: return
-        applyPosition(s)
-        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        v.visibility = if (landscape && s.hideInLandscape) View.GONE else View.VISIBLE
-        if (v.isAttachedToWindow) wm.updateViewLayout(v, params)
+        w.show()
+        w.update(s)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (composeView != null) applySettings(repo.state.value)
+        if (window?.isShowing == true) window?.update(repo.state.value)
     }
 
     override fun onDestroy() {
         scope.cancel()
-        if (receiverRegistered) {
+        if (powerReceiverRegistered) {
             try { unregisterReceiver(powerReceiver) } catch (_: Exception) {}
         }
-        if (accessibilityReceiverRegistered) {
+        if (modeReceiverRegistered) {
             try { unregisterReceiver(accessibilityModeReceiver) } catch (_: Exception) {}
         }
-        if (::wm.isInitialized) removeOverlay()
-        owner.stop()
+        window?.release()
+        window = null
         super.onDestroy()
     }
 }

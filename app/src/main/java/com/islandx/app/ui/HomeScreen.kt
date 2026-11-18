@@ -32,6 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedButton
@@ -47,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -72,8 +74,10 @@ import com.islandx.app.service.IslandAccessibilityService
 import com.islandx.app.service.IslandOverlayService
 import com.islandx.app.ui.overlay.AccentColors
 import com.islandx.app.ui.overlay.AccentNames
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private val CardBg = Color(0xFF1B1B20)
@@ -93,10 +97,22 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
         ActivityResultContracts.RequestPermission()
     ) { localTick++ }
 
+    // Every persisted URI grant counts against a per-app limit, so release the ones we stop using.
+    fun releasePhotoPermission(uriString: String) {
+        if (uriString.isBlank()) return
+        try {
+            activity.contentResolver.releasePersistableUriPermission(
+                Uri.parse(uriString), Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) { }
+    }
+
     val backgroundImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
+            val previous = s.backgroundImageUri
+            if (previous != uri.toString()) releasePhotoPermission(previous)
             try {
                 activity.contentResolver.takePersistableUriPermission(
                     uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -272,7 +288,16 @@ fun HomeScreen(activity: ComponentActivity, tick: Int) {
                         modifier = Modifier.weight(1f)
                     ) { Text(if (s.backgroundStyle == 3 && s.backgroundImageUri.isNotBlank()) "Change photo" else "Choose photo") }
                     if (s.backgroundImageUri.isNotBlank()) {
-                        OutlinedButton(onClick = { save(K.BACKGROUND_STYLE, 0); save(K.BACKGROUND_IMAGE_URI, "") }) {
+                        OutlinedButton(onClick = {
+                            releasePhotoPermission(s.backgroundImageUri)
+                            // One atomic write instead of two racing ones.
+                            scope.launch {
+                                repo.update {
+                                    it[K.BACKGROUND_STYLE] = 0
+                                    it[K.BACKGROUND_IMAGE_URI] = ""
+                                }
+                            }
+                        }) {
                             Text("Remove photo")
                         }
                     }
@@ -459,13 +484,20 @@ private fun PermRow(title: String, desc: String, granted: Boolean, onClick: () -
 private fun SliderRow(label: String, value: Int, range: IntRange, syncKey: Int, onChange: (Int) -> Unit) {
     // Local state keeps dragging smooth; syncKey re-reads the stored value after auto-detect.
     var v by remember(syncKey) { mutableFloatStateOf(value.toFloat()) }
+    // Slider emits a float on every pixel of movement. Each DataStore write rewrites the file and
+    // fans out to the overlay, the listener and this screen, so only write when the INTEGER changes.
+    var lastSent by remember(syncKey) { mutableIntStateOf(value) }
     Column {
         Text("$label: ${v.roundToInt()}", color = Color.White, fontSize = 13.sp)
         Slider(
             value = v,
             onValueChange = {
                 v = it
-                onChange(it.roundToInt())
+                val rounded = it.roundToInt()
+                if (rounded != lastSent) {
+                    lastSent = rounded
+                    onChange(rounded)
+                }
             },
             valueRange = range.first.toFloat()..range.last.toFloat()
         )
@@ -478,19 +510,27 @@ private fun SliderRow(label: String, value: Int, range: IntRange, syncKey: Int, 
 private fun AppRulesScreen(s: IslandSettings, repo: SettingsRepository, onBack: () -> Unit) {
     val ctx: Context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val apps = remember {
-        val pm = ctx.packageManager
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        pm.queryIntentActivities(intent, 0)
-            .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
-            .distinctBy { it.first }
-            .filter { it.first != ctx.packageName }
-            .sortedBy { it.second.lowercase() }
+    // Loading labels for hundreds of apps used to run on the main thread (visible hitch / ANR risk).
+    val loadedApps by produceState<List<Pair<String, String>>?>(initialValue = null) {
+        value = withContext(Dispatchers.IO) {
+            val pm = ctx.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            pm.queryIntentActivities(intent, 0)
+                .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+                .distinctBy { it.first }
+                .filter { it.first != ctx.packageName }
+                .sortedBy { it.second.lowercase() }
+        }
     }
+    val apps = loadedApps
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("← Back") }
             Text("Apps allowed on the island", color = Color.White, fontWeight = FontWeight.SemiBold)
+        }
+        if (apps == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            return@Column
         }
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             items(apps, key = { it.first }) { (pkg, label) ->

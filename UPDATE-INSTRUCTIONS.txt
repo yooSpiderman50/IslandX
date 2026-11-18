@@ -1,14 +1,19 @@
-IslandX v1.2.8 — Capsule Background Theme Update
+IslandX v1.2.9 - audit fixes
 
-Update these files in the existing GitHub repository, keeping the same paths:
+Replace/add these files, keeping the same paths:
 - app/build.gradle.kts
+- app/src/main/AndroidManifest.xml
+- app/src/main/java/com/islandx/app/IslandXApp.kt
+- app/src/main/java/com/islandx/app/data/SettingsRepository.kt
+- app/src/main/java/com/islandx/app/domain/PriorityEngine.kt
+- app/src/main/java/com/islandx/app/domain/TimerController.kt
+- app/src/main/java/com/islandx/app/service/IslandAccessibilityService.kt
+- app/src/main/java/com/islandx/app/service/IslandNotificationListener.kt
+- app/src/main/java/com/islandx/app/service/IslandOverlayService.kt
+- app/src/main/java/com/islandx/app/service/OverlayWindow.kt   (NEW)
 - app/src/main/java/com/islandx/app/ui/HomeScreen.kt
 - app/src/main/java/com/islandx/app/ui/overlay/IslandOverlay.kt
-- app/src/main/java/com/islandx/app/service/IslandOverlayService.kt
-- app/src/main/java/com/islandx/app/service/IslandAccessibilityService.kt
 - CHANGELOG.md
 
-Features: Black, White, Glass (translucent frosted surface with Android blur-behind on Android 12+ where supported), and Choose Photo. Other IslandX features are intended to remain unchanged.
-
-Commit message: Add black white glass and gallery capsule themes (v1.2.8)
-Build and test with GitHub Actions before installing the APK.
+This update has NOT been compiled or run on a device. Build with GitHub Actions first and
+share the exact error log if anything fails.

@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.2.9 (audit fixes - not yet built or device-tested, see AUDIT_REPORT)
+
+Crashes
+- Fix UninitializedPropertyAccessException in IslandOverlayService when the accessibility overlay was active on Android 12+ (lateinit `params` touched before it was created).
+- Fix IllegalStateException in onDestroy() when the service stopped itself because the overlay permission was missing (lifecycle owner destroyed before it was started).
+- Accessibility service can no longer start its lifecycle owner twice.
+
+Behaviour
+- Island no longer disappears when the accessibility service is enabled in Settings but not connected: logic now uses a real "connected" flag.
+- White capsule background is readable (palette follows the background); Glass is now a dark frosted tint.
+- Default capsule background is solid black so the idle pill hides the camera ring.
+- Swipe-up now collapses the in-place expanded card (it only worked on the compact capsule before).
+- Notifications are no longer removed by their 6 s timeout while the island is expanded.
+- Cross-fade shows each layer's own event instead of the newest one.
+- Seek bar no longer jumps back after releasing the thumb.
+- Countdown timer is clock-based (no drift) and vibrates when finished.
+- A missed-call notification no longer removes an active call card.
+- Torch toggle follows the real torch state; picks the back camera.
+
+Performance
+- Photo background is decoded once, down-sampled to 640 px, and shared (was full-resolution, once per layer).
+- Slider writes to DataStore only when the integer value changes.
+- Notification listener no longer refreshes media sessions / rescales album art for every notification.
+- Listener ignores settings changes that do not affect events.
+- Equaliser bars: one transition, draw-phase only, stopped when paused or on Reduced motion.
+- Window layout is only updated when position / blur / visibility really changed.
+- Per-app list loads off the main thread.
+- Single-tap no longer waits for the double-tap timeout when nothing can be dismissed.
+
+Housekeeping
+- New OverlayWindow.kt replaces two duplicated copies of the window / lifecycle code.
+- Settings values are clamped on read; only IOException is swallowed when reading DataStore.
+- Persisted photo URI permissions are released when the photo is replaced or removed.
+- Added VIBRATE permission, allowBackup=false, content descriptions on icon buttons.
+
 ## 1.2.8
 - Add black, white, frosted glass and gallery photo background choices.
 - Enable Android blur-behind for the Glass style on Android 12+ when supported by the device.

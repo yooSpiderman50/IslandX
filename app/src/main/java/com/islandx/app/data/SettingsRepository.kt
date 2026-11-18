@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import java.io.IOException
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
@@ -37,7 +38,9 @@ data class IslandSettings(
     val expansionMode: Int = 0, // 0 = expand in place, 1 = separate popup card
     val animationStyle: Int = 0, // 0 = smooth, 1 = snappy, 2 = reduced motion
     val privacyMode: Boolean = false,
-    val backgroundStyle: Int = 0, // 0 glass, 1 white, 2 midnight, 3 photo
+    // 0 glass, 1 white, 2 black, 3 photo. Default is solid black: it hides the camera ring.
+    // A translucent idle pill over the punch-hole looks like a grey blob.
+    val backgroundStyle: Int = 2,
     val backgroundImageUri: String = "",
     val blockedApps: Set<String> = emptySet()
 )
@@ -68,7 +71,8 @@ object K {
 class SettingsRepository(private val context: Context, scope: CoroutineScope) {
 
     val flow: Flow<IslandSettings> = context.dataStore.data
-        .catch { emit(emptyPreferences()) }
+        // Only swallow disk errors; programming errors should not silently reset every setting.
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
         .map { it.toSettings() }
 
     /** Always-available latest value, readable from services without suspending. */
@@ -94,11 +98,12 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val d = IslandSettings()
         return IslandSettings(
             enabled = this[K.ENABLED] ?: d.enabled,
-            widthDp = this[K.WIDTH] ?: d.widthDp,
-            heightDp = this[K.HEIGHT] ?: d.heightDp,
-            offsetX = this[K.OFFSET_X] ?: d.offsetX,
-            offsetY = this[K.OFFSET_Y] ?: d.offsetY,
-            cornerDp = this[K.CORNER] ?: d.cornerDp,
+            // Clamp to the slider ranges so a corrupt / restored value can never break layout.
+            widthDp = (this[K.WIDTH] ?: d.widthDp).coerceIn(40, 260),
+            heightDp = (this[K.HEIGHT] ?: d.heightDp).coerceIn(20, 80),
+            offsetX = (this[K.OFFSET_X] ?: d.offsetX).coerceIn(-200, 200),
+            offsetY = (this[K.OFFSET_Y] ?: d.offsetY).coerceIn(0, 80),
+            cornerDp = (this[K.CORNER] ?: d.cornerDp).coerceIn(8, 40),
             haptics = this[K.HAPTICS] ?: d.haptics,
             glow = this[K.GLOW] ?: d.glow,
             showNotifications = this[K.NOTIFS] ?: d.showNotifications,
@@ -106,7 +111,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
             showCalls = this[K.CALLS] ?: d.showCalls,
             showBattery = this[K.BATTERY] ?: d.showBattery,
             hideInLandscape = this[K.HIDE_LANDSCAPE] ?: d.hideInLandscape,
-            accentIndex = this[K.ACCENT] ?: d.accentIndex,
+            accentIndex = (this[K.ACCENT] ?: d.accentIndex).coerceAtLeast(0),
             expansionMode = (this[K.EXPANSION_MODE] ?: d.expansionMode).coerceIn(0, 1),
             animationStyle = (this[K.ANIMATION_STYLE] ?: d.animationStyle).coerceIn(0, 2),
             privacyMode = this[K.PRIVACY_MODE] ?: d.privacyMode,
